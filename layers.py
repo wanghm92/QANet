@@ -11,7 +11,7 @@ from params import Params
 # from common_layers import *
 
 '''
-Some of the functions are burrowed from Tensor2Tensor Library https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
+Some of the functions are borrowed from Tensor2Tensor Library https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
 '''
 
 initializer = tf.contrib.layers.xavier_initializer

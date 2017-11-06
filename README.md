@@ -25,19 +25,20 @@ You can change the hyperparameters from params.py file to fit the model in your 
 ```shell
 $ python model.py
 ```
-To test or debug your model after training, put debug/test=True from params.py file and run the model.
+To test or debug your model after training, change mode = "train" from params.py file and run the model.
 
 ## TODO's
 - [x] Training and testing the model
-- [ ] Add trilinear function to Context-to-Query attention
+- [x] Add trilinear function to Context-to-Query attention
+- [ ] Apply dropout every 2 layers
 - [ ] Data augmentation by paraphrasing
 
 ## Tensorboard
 Run tensorboard for visualisation.
 ```shell
-$ tensorboard --logdir=r-net:train/
+$ tensorboard --logdir=./
 ```
 
 ## Note
 **04/11/17**
-Currently the model is not optimized and there is a memory leak so I strongly suggest only training if your memory is 16GB >. Also I haven't done convergence testing yet. The training time is 5 ~ 6x faster on naive implementation compared to R-net (https://github.com/minsangkim142/R-net)
+Currently the model is not optimized and there is a memory leak so I strongly suggest only training if your memory is 16GB >. Also I haven't done convergence testing yet. The training time is 5 ~ 6x faster on naive implementation compared to R-net (https://github.com/minsangkim142/R-net).

@@ -105,7 +105,7 @@ class data_loader(object):
                 f.write("%s: %s" % (key, value) + "\n")
 
     def loop(self, data, dir_ = Params.train_dir):
-        for topic in data['data']:
+        for topic in tqdm(data['data'],total = len(data['data'])):
             for para in topic['paragraphs']:
 
                 words_c,chars_c = self.add_to_dict(para['context'])
@@ -201,7 +201,7 @@ def load_glove(dir_, name, vocab_size):
                     assert 0
             line = f.readline()
             i += 1
-    print("")
+    print("\n")
     glove_map = np.memmap(Params.data_dir + name + ".np", dtype='float32', mode='write', shape=(vocab_size,Params.emb_size))
     glove_map[:] = glove
     del glove_map
@@ -232,6 +232,15 @@ def pad_data(data, max_word):
             if j >= max_word:
                 break
             padded_data[i,j] = word
+    return padded_data
+
+def pad_char_len(data, max_word, max_char):
+    padded_data = np.zeros((len(data), max_word), dtype=np.int32)
+    for i, line in enumerate(data):
+        for j, word in enumerate(line):
+            if j >= max_word:
+                break
+            padded_data[i, j] = word if word <= max_char else max_char
     return padded_data
 
 def pad_char_data(data, max_char, max_words):
@@ -306,7 +315,9 @@ def max_value(inputlist):
 def main():
     with open(Params.data_dir + 'dictionary.pkl','wb') as dictionary:
         loader = data_loader(use_pretrained = True)
+        print("Tokenizing training data.")
         loader.process_json(Params.data_dir + "train-v1.1.json", out_dir = Params.train_dir)
+        print("Tokenizing dev data.")
         loader.process_json(Params.data_dir + "dev-v1.1.json", out_dir = Params.dev_dir)
         pickle.dump(loader, dictionary, pickle.HIGHEST_PROTOCOL)
     print("Tokenizing complete")

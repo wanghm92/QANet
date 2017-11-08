@@ -17,7 +17,6 @@ optimizer_factory = {"adadelta":tf.train.AdadeltaOptimizer,
 			"adam":tf.train.AdamOptimizer,
 			"gradientdescent":tf.train.GradientDescentOptimizer,
 			"adagrad":tf.train.AdagradOptimizer}
-
 initializer = tf.contrib.layers.xavier_initializer
 
 class Model(object):

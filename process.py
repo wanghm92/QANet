@@ -7,13 +7,11 @@ import json
 import codecs
 import unicodedata
 import re
-import nltk
 import sys
 import os
 import argparse
 
 from tqdm import tqdm
-from nltk.tokenize import *
 from params import Params
 
 reload(sys)

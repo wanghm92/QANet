@@ -59,19 +59,25 @@ def multihead_attention(queries, units, num_heads, seq_len = None, scope = "Mult
         x = dot_product_attention(Q,K,V,bias = bias, seq_len = seq_len, dropout_rate = Params.dropout, is_training = is_training, scope = "dot_product_attention", reuse = reuse)
         return combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
 
+# def mask_logits(inputs, sequence_length, mask_value = -1e8):
+#     shapes = inputs.shape.as_list()
+#     if len(shapes) == 4:
+#         input_mask = tf.expand_dims(tf.expand_dims(tf.sequence_mask(sequence_length, maxlen=shapes[-1]),1),1)
+#         input_mask = tf.tile(input_mask,[1,shapes[1],shapes[2],1])
+#     elif len(shapes) == 3:
+#         input_mask = tf.expand_dims(tf.sequence_mask(sequence_length, maxlen=shapes[-1]),1)
+#         input_mask = tf.tile(input_mask,[1,shapes[1],1])
+#     else:
+#         raise ValueError("mask_logits require inputs rank of 3 or 4.")
+#     mask_values = mask_value * tf.ones_like(inputs)
+#     masked_outputs = tf.where(input_mask, inputs, mask_values)
+#     return tf.reshape(masked_outputs,[s for s in shapes])
+
 def mask_logits(inputs, sequence_length, mask_value = -1e8):
     shapes = inputs.shape.as_list()
-    if len(shapes) == 4:
-        input_mask = tf.expand_dims(tf.expand_dims(tf.sequence_mask(sequence_length, maxlen=shapes[-1]),1),1)
-        input_mask = tf.tile(input_mask,[1,shapes[1],shapes[2],1])
-    elif len(shapes) == 3:
-        input_mask = tf.expand_dims(tf.sequence_mask(sequence_length, maxlen=shapes[-1]),1)
-        input_mask = tf.tile(input_mask,[1,shapes[1],1])
-    else:
-        raise ValueError("mask_logits require inputs rank of 3 or 4.")
-    mask_values = mask_value * tf.ones_like(inputs)
-    masked_outputs = tf.where(input_mask, inputs, mask_values)
-    return tf.reshape(masked_outputs,[s for s in shapes])
+    mask = tf.reshape(tf.sequence_mask(sequence_length, maxlen=shapes[-1], dtype = tf.float32),[-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]])
+    mask_values = mask_value * tf.to_float(tf.not_equal(mask, tf.ones_like(mask)))
+    return inputs + mask_values
 
 def cross_entropy(output, target):
     cross_entropy = target * tf.log(output + 1e-8)
@@ -223,12 +229,10 @@ def get_timing_signal_1d(length, channels, min_timescale=1.0, max_timescale=1.0e
     return signal
 
 def trilinear(args, output_size, bias, bias_start=0.0, scope=None, squeeze=False, wd=0.0, input_keep_prob=1.0,
-           is_train=None):
+           is_training=None):
     flat_args = [flatten(arg, 1) for arg in args]
-    if input_keep_prob < 1.0:
-        if is_train:
-            flat_args = [tf.cond(is_train, lambda: tf.nn.dropout(arg, input_keep_prob), lambda: arg)
-                     for arg in flat_args]
+    if input_keep_prob < 1.0 and is_training:
+        flat_args = [tf.nn.dropout(arg, input_keep_prob) for arg in flat_args]
     flat_out = _linear(flat_args, output_size, bias, scope=scope)
     out = reconstruct(flat_out, args[0], 1)
     if squeeze:

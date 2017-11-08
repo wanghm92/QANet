@@ -6,11 +6,10 @@ import threading
 
 from tensorflow.python.platform import tf_logging as logging
 
-from params import Params
 import numpy as np
 import tensorflow as tf
+from params import Params
 from process import *
-from sklearn.model_selection import train_test_split
 
 # Adapted from the `sugartensor` code.
 # https://github.com/buriburisuri/sugartensor/blob/master/sugartensor/sg_queue.py

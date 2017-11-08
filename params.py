@@ -29,7 +29,7 @@ class Params():
     norm = 5.0 # global norm
     # NOTE: Change the hyperparameters of your learning algorithm here
     opt_arg = {'adadelta':{'learning_rate':1, 'rho': 0.95, 'epsilon':1e-6},
-                'adam':{'learning_rate':0.0, 'beta1':0.9, 'beta2':0.999, 'epsilon':1e-8},
+                'adam':{'learning_rate':0.001, 'beta1':0.8, 'beta2':0.999, 'epsilon':1e-7},
                 'gradientdescent':{'learning_rate':1},
                 'adagrad':{'learning_rate':1}}
 

@@ -33,26 +33,26 @@ def encoding(word, char, word_embeddings, char_embeddings, scope = "embedding"):
     char_encoding = tf.nn.embedding_lookup(char_embeddings, char)
     return word_encoding, char_encoding
 
-def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, num_filters, input_projection = False, seq_len = None, scope = "res_block", is_training = True, reuse = None, bias = True):
+def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, num_filters, input_projection = False, seq_len = None, scope = "res_block", is_training = True, reuse = None, bias = Params.bias):
     with tf.variable_scope(scope, reuse = reuse):
         if input_projection:
-            inputs = tf.layers.dense(inputs, num_filters, use_bias = Params.bias, kernel_initializer = initializer(), name = "input_projection", reuse = reuse)
+            inputs = tf.layers.dense(inputs, num_filters, use_bias = None, kernel_initializer = initializer(), name = "input_projection", reuse = reuse)
         outputs = tf.contrib.layers.layer_norm(inputs, scope = "layer_norm", reuse = reuse)
         for i in range(num_blocks):
             outputs = encoder_block(outputs, num_conv_layers, kernel_size, num_filters, seq_len = seq_len, scope = "encoder_block_%d"%i,reuse = reuse, bias = bias)
         outputs += inputs
         return outputs
 
-def encoder_block(inputs, num_conv_layers, kernel_size, num_filters, seq_len = None, scope = "encoder_block", is_training = True, reuse = None, bias = True):
+def encoder_block(inputs, num_conv_layers, kernel_size, num_filters, seq_len = None, scope = "encoder_block", is_training = True, reuse = None, bias = Params.bias):
     with tf.variable_scope(scope, reuse = reuse):
         inputs = add_timing_signal_1d(inputs)
         outputs = depthwise_separable_convolution(inputs, num_layers = num_conv_layers, kernel_size = kernel_size, num_filters = num_filters, reuse = reuse)
         outputs = multihead_attention(outputs, num_filters, num_heads = 2, seq_len = seq_len, reuse = reuse, is_training = is_training, bias = bias)
         return tf.layers.dense(outputs, num_filters, use_bias = Params.bias, kernel_initializer = initializer(), activation = tf.nn.relu, name = "output_projection", reuse = reuse)
 
-def multihead_attention(queries, units, num_heads, seq_len = None, scope = "Multi_Head_Attention", reuse = None, is_training = True, bias = True):
+def multihead_attention(queries, units, num_heads, seq_len = None, scope = "Multi_Head_Attention", reuse = None, is_training = True, bias = Params.bias):
     with tf.variable_scope(scope, reuse = reuse):
-        combined = tf.layers.dense(queries, 3 * units, use_bias = Params.bias, activation = tf.nn.relu, reuse = reuse)
+        combined = tf.layers.dense(queries, 3 * units, use_bias = Params.bias, activation = None, reuse = reuse)
         Q, K, V = [split_last_dimension(tensor, num_heads) for tensor in tf.split(combined,3,axis = 2)]
         key_depth_per_head = units // num_heads
         Q *= key_depth_per_head**-0.5
@@ -146,7 +146,7 @@ def dot_product_attention(q,
             logits = mask_logits(logits, seq_len)
         weights = tf.nn.softmax(logits, name="attention_weights")
         # dropping out the attention links for each of the heads
-        if is_training and Params.dropout:
+        if is_training and Params.dropout is not None:
             weights = tf.nn.dropout(weights, 1.0 - dropout_rate)
         return tf.matmul(weights, v)
 

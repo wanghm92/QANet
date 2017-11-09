@@ -31,7 +31,7 @@ args = parser.parse_args()
 
 if args.process:
     import spacy
-    nlp = spacy.load('en')
+    nlp = spacy.blank('en')
 
     def tokenize_corenlp(text):
         parsed = nlp(text)
@@ -323,6 +323,8 @@ def main():
     load_glove(Params.glove_dir,"glove",vocab_size = Params.vocab_size)
     load_glove(Params.glove_char,"glove_char", vocab_size = Params.char_vocab_size)
     print("Processing complete")
+    print("Unknown word ratio: {} / {}".format(loader.w_unknown_count,loader.w_occurence))
+    print("Unknown character ratio: {} / {}".format(loader.c_unknown_count,loader.c_occurence))
 
 if __name__ == "__main__":
     main()

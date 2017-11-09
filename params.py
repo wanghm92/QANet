@@ -23,7 +23,7 @@ class Params():
     mode = "train" # case-insensitive options: ["train", "test", "debug"]
     dropout = None # dropout probability, if None, don't use dropout
     optimizer = "adam" # Options: ["adadelta", "adam", "gradientdescent", "adagrad"]
-    batch_size = 32 if mode is not "test" else 100# Size of the mini-batch for training
+    batch_size = 32 if mode is not "test" else 100 # Size of the mini-batch for training
     save_steps = 100 # Save the model at every 50 steps
     clip = False # clip gradient norm
     norm = 5.0 # global norm
@@ -37,8 +37,8 @@ class Params():
     max_p_len = 400 # Maximum number of words in each passage context
     max_q_len = 30 # Maximum number of words in each question context
     max_char_len = 20 # Maximum number of characters in a word
-    vocab_size = 2196018 # Number of vocabs in glove.840B.300d.txt + 1 for an unknown token
-    char_vocab_size = 95 # Number of characters in glove.840B.300d.char.txt + 1 for an unknown character
+    vocab_size = 2196018 # Number of vocabs in glove.840B.300d.txt + 1 for an PAD token
+    char_vocab_size = 95 # Number of characters in glove.840B.300d.char.txt + 1 for an PAD character
     emb_size = 300 # Embeddings size for words
     bias = True # Use bias term in attention
     num_units = 128 # Number of units to use throughout the networks

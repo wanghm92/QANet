@@ -56,22 +56,8 @@ def multihead_attention(queries, units, num_heads, seq_len = None, scope = "Mult
         Q, K, V = [split_last_dimension(tensor, num_heads) for tensor in tf.split(combined,3,axis = 2)]
         key_depth_per_head = units // num_heads
         Q *= key_depth_per_head**-0.5
-        x = dot_product_attention(Q,K,V,bias = bias, seq_len = seq_len, dropout_rate = Params.dropout, is_training = is_training, scope = "dot_product_attention", reuse = reuse)
+        x = dot_product_attention(Q,K,V,bias = bias, seq_len = seq_len, is_training = is_training, scope = "dot_product_attention", reuse = reuse)
         return combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
-
-# def mask_logits(inputs, sequence_length, mask_value = -1e8):
-#     shapes = inputs.shape.as_list()
-#     if len(shapes) == 4:
-#         input_mask = tf.expand_dims(tf.expand_dims(tf.sequence_mask(sequence_length, maxlen=shapes[-1]),1),1)
-#         input_mask = tf.tile(input_mask,[1,shapes[1],shapes[2],1])
-#     elif len(shapes) == 3:
-#         input_mask = tf.expand_dims(tf.sequence_mask(sequence_length, maxlen=shapes[-1]),1)
-#         input_mask = tf.tile(input_mask,[1,shapes[1],1])
-#     else:
-#         raise ValueError("mask_logits require inputs rank of 3 or 4.")
-#     mask_values = mask_value * tf.ones_like(inputs)
-#     masked_outputs = tf.where(input_mask, inputs, mask_values)
-#     return tf.reshape(masked_outputs,[s for s in shapes])
 
 def mask_logits(inputs, sequence_length, mask_value = -1e8):
     shapes = inputs.shape.as_list()
@@ -97,6 +83,7 @@ def depthwise_separable_convolution(inputs, num_layers, kernel_size, num_filters
                                 pointwise_filter,
                                 strides = (1,1,1,1),
                                 padding = "SAME")
+            outputs = tf.nn.relu(outputs)
         return tf.squeeze(outputs)
 
 def split_last_dimension(x, n):
@@ -120,7 +107,6 @@ def dot_product_attention(q,
                           v,
                           bias,
                           seq_len = None,
-                          dropout_rate=0.0,
                           is_training = True,
                           scope=None,
                           reuse = None):
@@ -130,7 +116,6 @@ def dot_product_attention(q,
     k: a Tensor with shape [batch, heads, length_kv, depth_k]
     v: a Tensor with shape [batch, heads, length_kv, depth_v]
     bias: bias Tensor (see attention_bias())
-    dropout_rate: a floating point number
     is_training: a bool of training
     scope: an optional string
     Returns:
@@ -147,7 +132,7 @@ def dot_product_attention(q,
         weights = tf.nn.softmax(logits, name="attention_weights")
         # dropping out the attention links for each of the heads
         if is_training and Params.dropout is not None:
-            weights = tf.nn.dropout(weights, 1.0 - dropout_rate)
+            weights = tf.nn.dropout(weights, 1.0 - Params.dropout)
         return tf.matmul(weights, v)
 
 def combine_last_two_dimensions(x):

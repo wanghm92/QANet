@@ -54,7 +54,7 @@ class data_loader(object):
         if use_pretrained:
             self.append_dict = False
             self.w_dict, self.w_count = self.process_glove(Params.glove_dir, self.w_dict, self.w_count, Params.emb_size)
-            self.c_dict, self.c_count = self.process_glove(Params.glove_char, self.c_dict, self.c_count, Params.char_emb_size)
+            self.c_dict, self.c_count = self.process_glove(Params.glove_char, self.c_dict, self.c_count, 300)
             self.ids2word = {v: k for k, v in self.w_dict.iteritems()}
             self.ids2char = {v: k for k, v in self.c_dict.iteritems()}
 

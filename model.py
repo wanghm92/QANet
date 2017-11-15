@@ -52,10 +52,8 @@ class Model(object):
 
 	def encode_ids(self):
 		with tf.variable_scope("Input_Embedding_Layer"):
-			self.unknown_char_embeddings = tf.get_variable("unknown_char_embeddings", (1, Params.emb_size),dtype = tf.float32, initializer = initializer())
-			self.char_embeddings = tf.get_variable("char_embeddings", (Params.char_vocab_size, Params.emb_size), dtype = tf.float32, initializer = initializer())
-			self.char_embeddings = tf.concat((self.unknown_char_embeddings, self.char_embeddings),axis = 0)
 			with tf.device('/cpu:0'):
+				self.char_embeddings = tf.get_variable("char_embeddings", (Params.char_vocab_size+1, Params.char_emb_size), dtype = tf.float32, initializer = initializer())
 				self.word_embeddings = tf.Variable(tf.constant(0.0, shape=[Params.vocab_size, Params.emb_size]),trainable=False, name="word_embeddings")
 				self.word_embeddings_placeholder = tf.placeholder(tf.float32,[Params.vocab_size, Params.emb_size],"word_embeddings_placeholder")
 				self.emb_assign = tf.assign(self.word_embeddings, self.word_embeddings_placeholder)
@@ -124,10 +122,12 @@ class Model(object):
 				with tf.control_dependencies([ema_op]):
 					self.mean_loss = tf.identity(self.mean_loss)
 
-			self.optimizer = optimizer_factory[Params.optimizer](**Params.opt_arg[Params.optimizer])
+			# learning rate warmup scheme
+			self.warmup_scheme = tf.minimum(Params.LearningRate, tf.exp(1e-6 * tf.cast(self.global_step, tf.float32)) - 1)
+			self.optimizer = optimizer_factory[Params.optimizer](learning_rate = self.warmup_scheme, **Params.opt_arg[Params.optimizer])
 
+			# gradient clipping by norm
 			if Params.clip:
-				# gradient clipping by norm
 				gradients, variables = zip(*self.optimizer.compute_gradients(self.mean_loss))
 				gradients, _ = tf.clip_by_global_norm(gradients, Params.norm)
 				self.train_op = self.optimizer.apply_gradients(zip(gradients, variables), global_step = self.global_step)
@@ -146,7 +146,7 @@ class Model(object):
 		tf.summary.scalar('loss_dev', self.dev_loss)
 		tf.summary.scalar("F1_Score",self.F1)
 		tf.summary.scalar("Exact_Match",self.EM)
-		tf.summary.scalar('learning_rate', Params.opt_arg[Params.optimizer]['learning_rate'])
+		tf.summary.scalar('learning_rate', self.warmup_scheme)
 		self.merged = tf.summary.merge_all()
 
 def debug():

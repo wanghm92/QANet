@@ -23,7 +23,7 @@ Preprocessing step is identical to R-net (https://github.com/minsangkim142/R-net
 ```shell
 $ pip install -r requirements.txt
 $ bash setup.sh
-$ python process.py --process True
+$ python process.py --process True --reduce_glove True
 ```
 
 ## Training / Testing / Debugging

@@ -85,8 +85,8 @@ class Model(object):
 
 	def embedding_encoder(self):
 		with tf.variable_scope("Embedding_Encoder_Layer"):
-			self.passage_context = residual_block(self.passage_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 5, num_filters = Params.num_units, input_projection = True, seq_len = self.passage_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = False, bias = False)
-			self.question_context = residual_block(self.question_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 5, num_filters = Params.num_units, input_projection = True, seq_len = self.question_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = True, bias = False)
+			self.passage_context = residual_block(self.passage_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 7, num_filters = Params.num_units, input_projection = True, seq_len = self.passage_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = False, bias = False)
+			self.question_context = residual_block(self.question_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 7, num_filters = Params.num_units, input_projection = True, seq_len = self.question_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = True, bias = False)
 
 	def context_to_query(self):
 		with tf.variable_scope("Context_to_Query_Attention_Layer"):
@@ -95,7 +95,7 @@ class Model(object):
 			S = tf.squeeze(trilinear([P, Q, P*Q], 1, bias = Params.bias, scope = "trilinear"))
 			# S_ = tf.nn.softmax(mask_logits(S, self.question_len))
 			S_ = tf.nn.softmax(S)
-			self.c2q_attention = tf.matmul(S_, self.question_context)
+			self.c2q_attention = tf.matmul(S_, self.question_context)# + self.passage_context
 			if self.is_training and Params.dropout is not None:
 				self.c2q_attention = tf.nn.dropout(self.c2q_attention, 1.0 - Params.dropout)
 
@@ -106,7 +106,7 @@ class Model(object):
 			for i in range(3):
 				if self.is_training and Params.dropout is not None:
 					self.encoder_outputs[i] = tf.nn.dropout(self.encoder_outputs[i], 1.0 - Params.dropout)
-				self.encoder_outputs.append(residual_block(self.encoder_outputs[i], num_blocks = 7, num_conv_layers = 2, kernel_size = 7, num_filters = Params.num_units, seq_len = self.passage_len, scope = "Model_Encoder", reuse = True if i > 0 else None))
+				self.encoder_outputs.append(residual_block(self.encoder_outputs[i], num_blocks = 7, num_conv_layers = 2, kernel_size = 5, num_filters = Params.num_units, seq_len = self.passage_len, scope = "Model_Encoder", reuse = True if i > 0 else None))
 
 	def output_layer(self):
 		with tf.variable_scope("Output_Layer"):
@@ -131,7 +131,7 @@ class Model(object):
 					self.mean_loss = tf.identity(self.mean_loss)
 
 			# learning rate warmup scheme
-			self.warmup_scheme = tf.minimum(Params.LearningRate, tf.log(tf.cast(self.global_step, tf.float32) + 1) / 3000)
+			self.warmup_scheme = tf.minimum(Params.LearningRate, tf.log(tf.cast(self.global_step, tf.float32) + 1) / (3000 * tf.log(10.0)))
 			# self.warmup_scheme = tf.minimum(Params.LearningRate, tf.exp(1e-6 * tf.cast(self.global_step, tf.float32)) - 1)
 			self.optimizer = optimizer_factory[Params.optimizer](learning_rate = self.warmup_scheme, **Params.opt_arg[Params.optimizer])
 

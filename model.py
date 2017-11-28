@@ -20,9 +20,10 @@ optimizer_factory = {"adadelta":tf.train.AdadeltaOptimizer,
 initializer = tf.contrib.layers.xavier_initializer
 
 class Model(object):
-	def __init__(self,is_training = True):
+	def __init__(self,vocabs_size, is_training = True):
 		# Build the computational graph when initializing
 		self.is_training = is_training
+		self.vocab_size, self.char_vocab_size = vocabs_size
 		self.graph = tf.Graph()
 		with self.graph.as_default():
 			self.global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -38,6 +39,7 @@ class Model(object):
 			self.passage_len = tf.squeeze(self.passage_w_len_)
 			self.question_len = tf.squeeze(self.question_w_len_)
 
+			# build a graph
 			self.encode_ids()
 			self.embedding_encoder()
 			self.context_to_query()
@@ -52,11 +54,15 @@ class Model(object):
 
 	def encode_ids(self):
 		with tf.variable_scope("Input_Embedding_Layer"):
+			self.char_unknown = tf.get_variable("unknown_char_embeddings", (1, Params.char_emb_size), dtype = tf.float32, initializer = initializer(), trainable = True)
+			self.word_unknown = tf.get_variable("unknown_word_embeddings", (1, Params.emb_size), dtype = tf.float32, initializer = initializer(), trainable = True)
 			with tf.device('/cpu:0'):
-				self.char_embeddings = tf.get_variable("char_embeddings", (Params.char_vocab_size+1, Params.char_emb_size), dtype = tf.float32, initializer = initializer())
-				self.word_embeddings = tf.Variable(tf.constant(0.0, shape=[Params.vocab_size, Params.emb_size]),trainable=False, name="word_embeddings")
-				self.word_embeddings_placeholder = tf.placeholder(tf.float32,[Params.vocab_size, Params.emb_size],"word_embeddings_placeholder")
+				self.char_embeddings = tf.get_variable("char_embeddings", (self.char_vocab_size - 1, Params.char_emb_size), dtype = tf.float32, initializer = initializer())
+				self.word_embeddings = tf.Variable(tf.constant(0.0, shape=[self.vocab_size - 1, Params.emb_size]),trainable=False, name="word_embeddings")
+				self.word_embeddings_placeholder = tf.placeholder(tf.float32,[self.vocab_size - 1, Params.emb_size],"word_embeddings_placeholder")
 				self.emb_assign = tf.assign(self.word_embeddings, self.word_embeddings_placeholder)
+				self.word_embeddings = tf.concat((self.word_unknown, self.word_embeddings), axis = 0)
+				self.char_embeddings = tf.concat((self.char_unknown, self.char_embeddings), axis = 0)
 
 			# Embed the question and passage information for word and character tokens
 			self.passage_word_encoded, self.passage_char_encoded = encoding(self.passage_w,
@@ -87,7 +93,8 @@ class Model(object):
 			P = tf.tile(tf.expand_dims(self.passage_context,2),[1,1,Params.max_q_len,1])
 			Q = tf.tile(tf.expand_dims(self.question_context,1),[1,Params.max_p_len,1,1])
 			S = tf.squeeze(trilinear([P, Q, P*Q], 1, bias = Params.bias, scope = "trilinear"))
-			S_ = tf.nn.softmax(mask_logits(S, self.question_len))
+			# S_ = tf.nn.softmax(mask_logits(S, self.question_len))
+			S_ = tf.nn.softmax(S)
 			self.c2q_attention = tf.matmul(S_, self.question_context)
 			if self.is_training and Params.dropout is not None:
 				self.c2q_attention = tf.nn.dropout(self.c2q_attention, 1.0 - Params.dropout)
@@ -106,13 +113,14 @@ class Model(object):
 			self.start_logits = tf.layers.dense(tf.concat([self.encoder_outputs[1], self.encoder_outputs[2]],axis = -1),1, use_bias = False, name = "start_pointer")
 			self.end_logits = tf.layers.dense(tf.concat([self.encoder_outputs[1], self.encoder_outputs[3]],axis = -1),1, use_bias = False, name = "end_pointer")
 			logits = tf.stack([self.start_logits, self.end_logits],axis = 1)
-			self.logits = tf.nn.softmax(tf.squeeze(logits))
+			self.logits = tf.squeeze(logits)
 
 	def loss_function(self):
 		with tf.variable_scope("loss"):
 			shapes = self.passage_w.shape
 			self.indices_prob = tf.one_hot(self.indices, shapes[1])
-			self.mean_loss = cross_entropy(self.logits, self.indices_prob)
+			# self.mean_loss = cross_entropy(self.logits, self.indices_prob)
+			self.mean_loss = tf.reduce_mean(tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(labels = self.indices_prob, logits = self.logits), axis = 1))
 
 			# apply ema
 			if Params.decay is not None:
@@ -123,7 +131,8 @@ class Model(object):
 					self.mean_loss = tf.identity(self.mean_loss)
 
 			# learning rate warmup scheme
-			self.warmup_scheme = tf.minimum(Params.LearningRate, tf.exp(1e-6 * tf.cast(self.global_step, tf.float32)) - 1)
+			self.warmup_scheme = tf.minimum(Params.LearningRate, tf.log(tf.cast(self.global_step, tf.float32) + 1) / 3000)
+			# self.warmup_scheme = tf.minimum(Params.LearningRate, tf.exp(1e-6 * tf.cast(self.global_step, tf.float32)) - 1)
 			self.optimizer = optimizer_factory[Params.optimizer](learning_rate = self.warmup_scheme, **Params.opt_arg[Params.optimizer])
 
 			# gradient clipping by norm
@@ -150,7 +159,8 @@ class Model(object):
 		self.merged = tf.summary.merge_all()
 
 def debug():
-	model = Model(is_training = True)
+	dict_ = pickle.load(open(Params.data_dir + "dictionary.pkl","r"))
+	model = Model((dict_.w_count, dict_.c_count), is_training = True)
 	print("Built model")
 
 # def test():
@@ -172,14 +182,14 @@ def debug():
 # 			print("Exact_match: {}\nF1_score: {}".format(EM,F1))
 
 def main():
-	model = Model(is_training = True); print("Built model")
 	dict_ = pickle.load(open(Params.data_dir + "dictionary.pkl","r"))
+	model = Model((dict_.w_count, dict_.c_count),is_training = True); print("Built model")
 	init = False
 	devdata, dev_ind = get_dev()
 	if not os.path.isfile(os.path.join(Params.logdir,"checkpoint")):
 		init = True
 		glove = np.memmap(Params.data_dir + "glove.np", dtype = np.float32, mode = "r")
-		glove = np.reshape(glove,(Params.vocab_size,Params.emb_size))
+		glove = np.reshape(glove,(dict_.w_count - 1,Params.emb_size))
 	with model.graph.as_default():
 		config = tf.ConfigProto()
 		config.gpu_options.allow_growth = True

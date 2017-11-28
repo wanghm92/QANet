@@ -38,6 +38,8 @@ def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, num_filters
         if input_projection:
             inputs = conv(inputs, num_filters, name = "input_projection", reuse = reuse)
         outputs = tf.contrib.layers.layer_norm(inputs, scope = "layer_norm", reuse = reuse)
+        # if Params.dropout is not None and is_training:
+        #     outputs = tf.nn.dropout(outputs, 1.0 - Params.dropout)
         for i in range(num_blocks):
             outputs = encoder_block(outputs, num_conv_layers, kernel_size, num_filters, seq_len = seq_len, scope = "encoder_block_%d"%i,reuse = reuse, bias = bias)
             if (i + 1) % 2 == 0:
@@ -50,41 +52,43 @@ def encoder_block(inputs, num_conv_layers, kernel_size, num_filters, seq_len = N
     with tf.variable_scope(scope, reuse = reuse):
         inputs = add_timing_signal_1d(inputs)
         outputs = depthwise_separable_convolution(inputs, num_layers = num_conv_layers, kernel_size = kernel_size, num_filters = num_filters, is_training = is_training, reuse = reuse)
-        outputs = multihead_attention(outputs, num_filters, num_heads = Params.num_heads, seq_len = seq_len, reuse = reuse, is_training = is_training, bias = bias)
-        if Params.attention == "branched":
-            return outputs
-        else:
-            return conv(outputs, num_filters, activation = tf.nn.relu, name = "output_projection", reuse = reuse)
+        return self_attention_FFN(outputs, num_filters, num_heads = Params.num_heads, seq_len = seq_len, reuse = reuse, is_training = is_training, bias = bias)
 
-def multihead_attention(queries, units, num_heads, seq_len = None, scope = "Multi_Head_Attention", reuse = None, is_training = True, bias = Params.bias):
+def self_attention_FFN(queries, units, num_heads, seq_len = None, scope = "Multi_Head_Attention", reuse = None, is_training = True, bias = Params.bias):
     with tf.variable_scope(scope, reuse = reuse):
+        # Self attention
         combined = conv(queries, 3 * units, name = "projection", reuse =reuse)
         Q, K, V = [split_last_dimension(tensor, num_heads) for tensor in tf.split(combined,3,axis = 2)]
         key_depth_per_head = units // num_heads
         Q *= key_depth_per_head**-0.5
         x = dot_product_attention(Q,K,V,bias = bias, seq_len = seq_len, is_training = is_training, scope = "dot_product_attention", reuse = reuse)
-        # Apply branched attention from https://arxiv.org/pdf/1711.02132v1.pdf
+        # FFN
         if Params.attention == "branched":
+            # Apply branched attention from https://arxiv.org/pdf/1711.02132v1.pdf
             shapes = x.shape.as_list()
-            kappa = tf.nn.softmax(tf.get_variable("kappa", (1,num_heads,1,1), dtype = tf.float32, initializer = tf.random_uniform_initializer()))
-            alpha = tf.nn.softmax(tf.get_variable("alpha", (1,num_heads,1,1), dtype = tf.float32, initializer = tf.random_uniform_initializer()))
-            x = conv(x, units, name = "output_projection", reuse = reuse) * kappa
-            x = conv(x, units, bias = True, activation = tf.nn.relu, name ="Feed_forward_network", reuse = reuse) * alpha
+            kappa = tf.reshape(tf.nn.softmax(tf.get_variable("kappa", num_heads, dtype = tf.float32, initializer = tf.random_uniform_initializer())),(1,num_heads,1,1))
+            alpha = tf.reshape(tf.nn.softmax(tf.get_variable("alpha", num_heads, dtype = tf.float32, initializer = tf.random_uniform_initializer())), (1,num_heads,1,1))
+            x = conv(x, units, kernel_size = num_heads,bias = None, name = "output_projection", reuse = reuse) * kappa
+            x = conv(x, units, bias = Params.bias, activation = tf.nn.relu, name ="FFN_1", reuse = reuse)
+            x = conv(x, units, bias = Params.bias, activation = None, name ="FFN_2", reuse = reuse) * alpha
             return tf.reduce_sum(x, axis = 1)
         else:
-            return combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
+            x = combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
+            x = conv(x, units, bias = None, name = "output_projection", reuse = reuse)
+            x = conv(x, units, bias = Params.bias, activation = tf.nn.relu, name = "FFN_1", reuse = reuse)
+            return conv(x, units, bias = Params.bias, activation = None, name = "FFN_2", reuse = reuse)
 
-def conv(inputs, output_size, bias = None, activation = None, name = "conv", reuse = None):
+def conv(inputs, output_size, kernel_size = 1, bias = None, activation = None, name = "conv", reuse = None):
     with tf.variable_scope(name, reuse = reuse):
         shapes = inputs.shape.as_list()
         if len(shapes) > 4:
             raise NotImplementedError
         elif len(shapes) == 4:
-            filter_shape = [1,1,shapes[-1],output_size]
+            filter_shape = [kernel_size,1,shapes[-1],output_size]
             bias_shape = [1,1,1,output_size]
             strides = [1,1,1,1]
         else:
-            filter_shape = [1,shapes[-1],output_size]
+            filter_shape = [kernel_size,shapes[-1],output_size]
             bias_shape = [1,1,output_size]
             strides = 1
         conv_func = tf.nn.conv1d if len(shapes) == 3 else tf.nn.conv2d
@@ -98,10 +102,11 @@ def conv(inputs, output_size, bias = None, activation = None, name = "conv", reu
             return outputs
 
 def mask_logits(inputs, sequence_length, mask_value = -1e7):
-    shapes = inputs.shape.as_list()
-    mask = tf.reshape(tf.sequence_mask(sequence_length, maxlen=shapes[-1], dtype = tf.float32),[-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]])
-    mask_values = mask_value * tf.to_float(tf.not_equal(mask, tf.ones_like(mask)))
-    return inputs + mask_values
+    # shapes = inputs.shape.as_list()
+    # mask = tf.reshape(tf.sequence_mask(sequence_length, maxlen=shapes[-1], dtype = tf.float32),[-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]])
+    # mask_values = mask_value * tf.to_float(tf.not_equal(mask, tf.ones_like(mask)))
+    # return inputs + mask_values
+    return inputs
 
 def cross_entropy(output, target):
     cross_entropy = target * tf.log(output + 1e-7)
@@ -165,12 +170,12 @@ def dot_product_attention(q,
         if bias:
             b = tf.get_variable("bias", logits.shape[-1], initializer = initializer)
             logits += b
-        if seq_len is not None:
-            logits = mask_logits(logits, seq_len)
+        # if seq_len is not None:
+        #     logits = mask_logits(logits, seq_len)
         weights = tf.nn.softmax(logits, name="attention_weights")
         # dropping out the attention links for each of the heads
-        if is_training and Params.dropout is not None:
-            weights = tf.nn.dropout(weights, 1.0 - Params.dropout)
+        # if is_training and Params.dropout is not None:
+        #     weights = tf.nn.dropout(weights, 1.0 - Params.dropout)
         return tf.matmul(weights, v)
 
 def combine_last_two_dimensions(x):
@@ -254,8 +259,8 @@ def get_timing_signal_1d(length, channels, min_timescale=1.0, max_timescale=1.0e
 def trilinear(args, output_size, bias, bias_start=0.0, scope=None, squeeze=False, wd=0.0, input_keep_prob=1.0,
            is_training=None):
     flat_args = [flatten(arg, 1) for arg in args]
-    if input_keep_prob < 1.0 and is_training:
-        flat_args = [tf.nn.dropout(arg, input_keep_prob) for arg in flat_args]
+    # if input_keep_prob < 1.0 and is_training:
+    #     flat_args = [tf.nn.dropout(arg, input_keep_prob) for arg in flat_args]
     flat_out = _linear(flat_args, output_size, bias, scope=scope)
     out = reconstruct(flat_out, args[0], 1)
     if squeeze:

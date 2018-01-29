@@ -7,7 +7,7 @@ class Params():
     data_dir = "./data/"
     train_dir = data_dir + "trainset/"
     dev_dir = data_dir + "devset/"
-    logdir = "./train/full_norm"
+    logdir = "./train/train"
     glove_dir = "./glove.840B.300d.txt" # Glove file name (If you want to use your own glove, replace the file name here)
     glove_char = "./glove.840B.300d.char.txt" # Character Glove file name
     coreNLP_dir = "./stanford-corenlp-full-2017-06-09" # Directory to Stanford coreNLP tool
@@ -21,7 +21,7 @@ class Params():
 
     # Training
     mode = "train" # case-insensitive options: ["train", "test", "debug"]
-    initialLearningRate = 1e-3
+    LearningRate = 1e-3
     dropout = None # dropout probability, if None, don't use dropout
     decay = 0.9999 # decay rate of the exponential moving average
     optimizer = "adam" # Options: ["adadelta", "adam", "gradientdescent", "adagrad"]

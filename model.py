@@ -126,7 +126,7 @@ class Model(object):
 					self.mean_loss = tf.identity(self.mean_loss)
 
 			# learning rate warmup scheme
-			self.warmup_scheme = tf.minimum(Params.initialLearningRate, tf.exp(1e-6 * tf.cast(self.global_step, tf.float32)) - 1)
+			self.warmup_scheme = tf.minimum(Params.LearningRate, tf.exp(1e-6 * tf.cast(self.global_step, tf.float32)) - 1)
 			# self.warmup_scheme = (Params.num_units ** -0.5) * tf.minimum((tf.cast(self.global_step,tf.float32)**-0.5), tf.cast(self.global_step, tf.float32)*(Params.warmup_steps ** -1.5))
 			self.optimizer = optimizer_factory[Params.optimizer](learning_rate = self.warmup_scheme, **Params.opt_arg[Params.optimizer])
 

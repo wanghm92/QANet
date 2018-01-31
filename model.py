@@ -25,6 +25,7 @@ class Model(object):
 		self.is_training = is_training
 		self.graph = tf.Graph()
 		with self.graph.as_default():
+			self.dropout = tf.placeholder_with_default(0.0, (), name="dropout")
 			self.global_step = tf.Variable(0, name='global_step', trainable=False)
 			self.data, self.num_batch = get_batch(is_training = is_training)
 			(self.passage_w,
@@ -69,36 +70,36 @@ class Model(object):
 											char_embeddings = self.char_embeddings)
 			self.passage_char_encoded = tf.reduce_max(self.passage_char_encoded, axis = 2)
 			self.question_char_encoded = tf.reduce_max(self.question_char_encoded, axis = 2)
-			if self.is_training and Params.dropout is not None:
-				self.passage_word_encoded = tf.nn.dropout(self.passage_word_encoded, 1.0 - Params.dropout)
-				self.passage_char_encoded = tf.nn.dropout(self.passage_char_encoded, 1.0 - 0.05)
-				self.question_word_encoded = tf.nn.dropout(self.question_word_encoded, 1.0 - Params.dropout)
-				self.question_char_encoded = tf.nn.dropout(self.question_char_encoded, 1.0 - 0.05)
+			self.passage_word_encoded = tf.nn.dropout(self.passage_word_encoded, 1.0 - self.dropout)
+			self.question_word_encoded = tf.nn.dropout(self.question_word_encoded, 1.0 - self.dropout)
+			# if self.is_training and Params.dropout is not None:
+			self.passage_char_encoded = tf.nn.dropout(self.passage_char_encoded, 1.0 - 0.5 * self.dropout)
+			self.question_char_encoded = tf.nn.dropout(self.question_char_encoded, 1.0 - 0.5 * self.dropout)
 			self.passage_encoding = tf.concat((self.passage_word_encoded, self.passage_char_encoded), axis = -1)
 			self.question_encoding = tf.concat((self.question_word_encoded, self.question_char_encoded), axis = -1)
+			# self.passage_encoding = highway(self.passage_encoding, 128, project = True, scope = "highway", reuse = None)
+			# self.question_encoding = highway(self.question_encoding, 128, project = True, scope = "highway", reuse = True)
 
 	def embedding_encoder(self):
 		with tf.variable_scope("Embedding_Encoder_Layer"):
-			self.passage_context = residual_block(self.passage_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 7, num_filters = Params.num_units, input_projection = True, seq_len = self.passage_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = False, bias = False)
-			self.question_context = residual_block(self.question_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 7, num_filters = Params.num_units, input_projection = True, seq_len = self.question_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = True, bias = False)
+			self.passage_context = residual_block(self.passage_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 7, num_filters = Params.num_units, input_projection = True, seq_len = self.passage_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = False, bias = False, dropout = self.dropout)
+			self.question_context = residual_block(self.question_encoding, num_blocks = 1, num_conv_layers = 4, kernel_size = 7, num_filters = Params.num_units, input_projection = True, seq_len = self.question_len, scope = "Encoder_Residual_Block", is_training = self.is_training, reuse = True, bias = False, dropout = self.dropout)
 
 	def context_to_query(self):
 		with tf.variable_scope("Context_to_Query_Attention_Layer"):
 			P = tf.tile(tf.expand_dims(self.passage_context,2),[1,1,Params.max_q_len,1])
 			Q = tf.tile(tf.expand_dims(self.question_context,1),[1,Params.max_p_len,1,1])
-			S = tf.squeeze(trilinear([P, Q, P*Q], 1, bias = Params.bias, scope = "trilinear",is_training = self.is_training))
+			S = tf.squeeze(trilinear([P, Q, P*Q], output_size = 1, bias = Params.bias, input_keep_prob = self.dropout, scope = "trilinear",is_training = self.is_training))
 			S_ = tf.nn.softmax(mask_logits(S, self.question_len))
 			self.c2q_attention = tf.matmul(S_, self.question_context)
-			if self.is_training and Params.dropout is not None:
-				self.c2q_attention = tf.nn.dropout(self.c2q_attention, 1.0 - Params.dropout)
+			self.c2q_attention = tf.nn.dropout(self.c2q_attention, 1.0 - self.dropout)
 
 	def model_encoder(self):
 		with tf.variable_scope("Model_Encoder_Layer"):
 			inputs = tf.concat([self.passage_context, self.c2q_attention, self.passage_context * self.c2q_attention], axis = -1)
 			self.encoder_outputs = [tf.layers.dense(inputs, Params.num_units, name = "input_projection")]
 			for i in range(3):
-				if self.is_training and Params.dropout is not None:
-					self.encoder_outputs[i] = tf.nn.dropout(self.encoder_outputs[i], 1.0 - Params.dropout)
+				# self.encoder_outputs[i] = tf.nn.dropout(self.encoder_outputs[i], 1.0 - self.dropout)
 				self.encoder_outputs.append(residual_block(self.encoder_outputs[i], num_blocks = 7, num_conv_layers = 2, kernel_size = 5, num_filters = Params.num_units, seq_len = self.passage_len, scope = "Model_Encoder", reuse = True if i > 0 else None))
 
 	def output_layer(self):
@@ -197,7 +198,8 @@ def main():
 				if sv.should_stop(): break
 				train_loss = []
 				for step in tqdm(range(model.num_batch), total = model.num_batch, ncols=70, leave=False, unit='b'):
-					_, loss = sess.run([model.train_op, model.mean_loss])
+					_, loss = sess.run([model.train_op, model.mean_loss],
+										feed_dict={model.dropout: Params.dropout if Params.dropout is not None else 0.0})
 					train_loss.append(loss)
 					if step % Params.save_steps == 0:
 						gs = sess.run(model.global_step)

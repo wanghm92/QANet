@@ -28,12 +28,22 @@ and BiDAF repository https://github.com/allenai/bi-att-flow.
 initializer = tf.contrib.layers.variance_scaling_initializer(factor=1.0, mode='FAN_AVG', uniform=False, seed=None, dtype=tf.float32)
 initializer_relu = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
 
+def highway(x, size, activation = tf.nn.relu, project = False, num_layers = 2, scope = "highway", reuse = None):
+	with tf.variable_scope(scope, reuse):
+		if project:
+			x = conv(inputs, size, name = "input_projection", reuse = reuse)
+		for i in range(num_layers):
+			T = conv(x, size, True, activation = tf.sigmoid, name = "gate_%d"%i, reuse = reuse)
+			H = conv(x, size, True, activation = activation, name = "activation_%d"%i, reuse = reuse)
+			x = H * T + x * (1.0 - T)
+		return x
+
 def encoding(word, char, word_embeddings, char_embeddings, scope = "embedding"):
 	word_encoding = tf.nn.embedding_lookup(word_embeddings, word)
 	char_encoding = tf.nn.embedding_lookup(char_embeddings, char)
 	return word_encoding, char_encoding
 
-def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, num_filters, input_projection = False, seq_len = None, scope = "res_block", is_training = True, reuse = None, bias = Params.bias):
+def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, num_filters, input_projection = False, seq_len = None, scope = "res_block", is_training = True, reuse = None, bias = Params.bias, dropout = 0.0):
 	with tf.variable_scope(scope, reuse = reuse):
 		if input_projection:
 			inputs = conv(inputs, num_filters, name = "input_projection", reuse = reuse)
@@ -42,9 +52,9 @@ def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, num_filters
 			outputs = add_timing_signal_1d(outputs)
 			outputs = conv_block(outputs, num_conv_layers, kernel_size, num_filters, seq_len = seq_len, scope = "encoder_block_%d"%i,reuse = reuse, bias = bias)
 			outputs = self_attention_block(outputs, num_filters, seq_len, scope = "self_attention_layers%d"%i, reuse = reuse, is_training = is_training, bias = bias)
-			if Params.dropout is not None and is_training:
-				if (i + 1) % 2 == 0:
-					outputs = tf.nn.dropout(outputs, 1.0 - Params.dropout)
+			# if Params.dropout is not None and is_training:
+			if (i + 1) % 2 == 0:
+				outputs = tf.nn.dropout(outputs, 1.0 - dropout)
 		return outputs
 
 def conv_block(inputs, num_conv_layers, kernel_size, num_filters, seq_len = None, scope = "conv_block", is_training = True, reuse = None, bias = Params.bias):
@@ -177,8 +187,8 @@ def dot_product_attention(q,
 			logits = mask_logits(logits, seq_len)
 		weights = tf.nn.softmax(logits, name="attention_weights")
 		# dropping out the attention links for each of the heads
-		if is_training and Params.dropout is not None:
-			weights = tf.nn.dropout(weights, 1.0 - Params.dropout)
+		# if is_training and Params.dropout is not None:
+		# 	weights = tf.nn.dropout(weights, 1.0 - Params.dropout)
 		return tf.matmul(weights, v)
 
 def combine_last_two_dimensions(x):
@@ -259,15 +269,22 @@ def get_timing_signal_1d(length, channels, min_timescale=1.0, max_timescale=1.0e
 	signal = tf.reshape(signal, [1, length, channels])
 	return signal
 
-def trilinear(args, output_size, bias, bias_start=0.0, scope=None, squeeze=False, wd=0.0, input_keep_prob= 1.0,
-		   is_training=None):
-	flat_args = [flatten(arg, 1) for arg in args]
-	if input_keep_prob < 1.0 and is_training:
-		flat_args = [tf.nn.dropout(arg, input_keep_prob,noise_shape = [1,output_size]) for arg in flat_args]
-	flat_out = _linear(flat_args, output_size, bias, scope=scope)
-	out = reconstruct(flat_out, args[0], 1)
-	if squeeze:
-		out = tf.squeeze(out, [len(args[0].get_shape().as_list())-1])
+def trilinear(args,
+			output_size,
+			bias, bias_start=0.0,
+			squeeze=False,
+			wd=0.0,
+			input_keep_prob= 1.0,
+			scope = "trilinear",
+			is_training=None):
+	with tf.variable_scope(scope):
+		flat_args = [flatten(arg, 1) for arg in args]
+		# if input_keep_prob < 1.0 and is_training:
+		flat_args = [tf.nn.dropout(arg, input_keep_prob, noise_shape = [1,output_size]) for arg in flat_args]
+		flat_out = _linear(flat_args, output_size, bias, scope=scope)
+		out = reconstruct(flat_out, args[0], 1)
+		if squeeze:
+			out = tf.squeeze(out, [len(args[0].get_shape().as_list())-1])
 	return out
 
 def flatten(tensor, keep):

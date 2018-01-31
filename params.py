@@ -22,7 +22,7 @@ class Params():
     # Training
     mode = "train" # case-insensitive options: ["train", "test", "debug"]
     LearningRate = 1e-3
-    dropout = None # dropout probability, if None, don't use dropout
+    dropout = 0.1 # dropout probability, if None, don't use dropout
     decay = 0.9999 # decay rate of the exponential moving average
     optimizer = "adam" # Options: ["adadelta", "adam", "gradientdescent", "adagrad"]
     batch_size = 32 if mode is not "test" else 100 # Size of the mini-batch for training

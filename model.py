@@ -89,7 +89,7 @@ class Model(object):
 		with tf.variable_scope("Context_to_Query_Attention_Layer"):
 			P = tf.tile(tf.expand_dims(self.passage_context,2),[1,1,Params.max_q_len,1])
 			Q = tf.tile(tf.expand_dims(self.question_context,1),[1,Params.max_p_len,1,1])
-			S = tf.squeeze(trilinear([P, Q, P*Q], output_size = 1, bias = Params.bias, input_keep_prob = self.dropout, scope = "trilinear",is_training = self.is_training))
+			S = tf.squeeze(trilinear([P, Q, P*Q], output_size = 1, bias = Params.bias, input_keep_prob = 1.0 - self.dropout, scope = "trilinear",is_training = self.is_training))
 			S_ = tf.nn.softmax(mask_logits(S, self.question_len))
 			self.c2q_attention = tf.matmul(S_, self.question_context)
 			self.c2q_attention = tf.nn.dropout(self.c2q_attention, 1.0 - self.dropout)
@@ -97,9 +97,9 @@ class Model(object):
 	def model_encoder(self):
 		with tf.variable_scope("Model_Encoder_Layer"):
 			inputs = tf.concat([self.passage_context, self.c2q_attention, self.passage_context * self.c2q_attention], axis = -1)
-			self.encoder_outputs = [tf.layers.dense(inputs, Params.num_units, name = "input_projection")]
+			self.encoder_outputs = [conv(inputs, Params.num_units, name = "input_projection")]
 			for i in range(3):
-				# self.encoder_outputs[i] = tf.nn.dropout(self.encoder_outputs[i], 1.0 - self.dropout)
+				self.encoder_outputs[i] = tf.nn.dropout(self.encoder_outputs[i], 1.0 - self.dropout)
 				self.encoder_outputs.append(residual_block(self.encoder_outputs[i], num_blocks = 7, num_conv_layers = 2, kernel_size = 5, num_filters = Params.num_units, seq_len = self.passage_len, scope = "Model_Encoder", reuse = True if i > 0 else None))
 
 	def output_layer(self):
@@ -117,6 +117,11 @@ class Model(object):
 			self.indices_prob = tf.one_hot(self.indices, shapes[1])
 			# self.mean_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = self.logits, labels = self.indices_prob))
 			self.mean_loss = cross_entropy(self.logits, self.indices_prob)
+
+			if Params.l2_norm is not None:
+				variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+				l2_loss = tf.contrib.layers.apply_regularization(regularizer, variables)
+				self.mean_loss += l2_loss
 
 			# apply ema
 			if Params.decay is not None:

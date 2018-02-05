@@ -21,21 +21,37 @@ from operator import mul
 # from common_layers import *
 
 '''
-Some functions are borrowed from Tensor2Tensor Library https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
-and BiDAF repository https://github.com/allenai/bi-att-flow.
+Some functions are borrowed from Tensor2Tensor Library:
+https://github.com/tensorflow/tensor2tensor/
+and BiDAF repository:
+https://github.com/allenai/bi-att-flow
 '''
 
-initializer = tf.contrib.layers.variance_scaling_initializer(factor=1.0, mode='FAN_AVG', uniform=False, seed=None, dtype=tf.float32)
-initializer_relu = tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_IN', uniform=False, seed=None, dtype=tf.float32)
-regularizer = tf.contrib.layers.l2_regularizer(scale = Params.l2_norm if Params.l2_norm is not None else 0.0)
+initializer = tf.contrib.layers.variance_scaling_initializer(factor=1.0,
+                                                             mode='FAN_AVG',
+                                                             uniform=False,
+                                                             seed=None,
+                                                             dtype=tf.float32)
+initializer_relu = tf.contrib.layers.variance_scaling_initializer(factor=2.0,
+                                                             mode='FAN_IN',
+                                                             uniform=False,
+                                                             seed=None,
+                                                             dtype=tf.float32)
+regularizer = tf.contrib.layers.l2_regularizer(
+               scale = Params.l2_norm if Params.l2_norm is not None else 0.0)
 
-def highway(x, size, activation = tf.nn.relu, project = False, num_layers = 2, scope = "highway", reuse = None):
+def highway(x, size = None, activation = tf.nn.relu,
+            num_layers = 2, scope = "highway", reuse = None):
     with tf.variable_scope(scope, reuse):
-        if project:
+        if size is None:
+            size = x.shape.as_list()[-1]
+        else:
             x = conv(x, size, name = "input_projection", reuse = reuse)
         for i in range(num_layers):
-            T = conv(x, size, True, activation = tf.sigmoid, name = "gate_%d"%i, reuse = reuse)
-            H = conv(x, size, True, activation = activation, name = "activation_%d"%i, reuse = reuse)
+            T = conv(x, size, True, activation = tf.sigmoid,
+                     name = "gate_%d"%i, reuse = reuse)
+            H = conv(x, size, True, activation = activation,
+                     name = "activation_%d"%i, reuse = reuse)
             x = H * T + x * (1.0 - T)
         return x
 
@@ -49,43 +65,63 @@ def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, num_filters
         if input_projection:
             inputs = conv(inputs, num_filters, name = "input_projection", reuse = reuse)
         outputs = inputs
+        sublayer = 1
+        total_sublayers = (num_conv_layers + 3) * num_blocks
         for i in range(num_blocks):
             outputs = add_timing_signal_1d(outputs)
-            outputs = conv_block(outputs, num_conv_layers, kernel_size, num_filters, seq_len = seq_len, scope = "encoder_block_%d"%i,reuse = reuse, bias = bias, dropout = dropout)
-            outputs = self_attention_block(outputs, num_filters, seq_len, scope = "self_attention_layers%d"%i, reuse = reuse, is_training = is_training, bias = bias, dropout = dropout)
-            # if (i + 1) % 2 == 0:
-            #     outputs = tf.nn.dropout(outputs, 1.0 - dropout)
+            outputs, sublayer = conv_block(outputs, num_conv_layers, kernel_size, num_filters, seq_len = seq_len, scope = "encoder_block_%d"%i,reuse = reuse, bias = bias, dropout = dropout, sublayers = (sublayer, total_sublayers))
+            outputs, sublayer = self_attention_block(outputs, num_filters, seq_len, scope = "self_attention_layers%d"%i, reuse = reuse, is_training = is_training, bias = bias, dropout = dropout, sublayers = (sublayer, total_sublayers))
         return outputs
 
-def conv_block(inputs, num_conv_layers, kernel_size, num_filters, seq_len = None, scope = "conv_block", is_training = True, reuse = None, bias = Params.bias, dropout = 0.0):
+def conv_block(inputs, num_conv_layers, kernel_size, num_filters, seq_len = None, scope = "conv_block", is_training = True, reuse = None, bias = Params.bias, dropout = 0.0, sublayers = (1, 1)):
     with tf.variable_scope(scope, reuse = reuse):
         outputs = inputs
+        l, L = sublayers
         for i in range(num_conv_layers):
             residual = outputs
             outputs = tf.contrib.layers.layer_norm(outputs, scope = "layer_norm_%d"%i, reuse = reuse)
-            outputs = depthwise_separable_convolution(outputs, kernel_size = kernel_size, num_filters = num_filters, scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse) + residual
-            # if (i + 1) % 2 == 0:
-            #     outputs = tf.nn.dropout(outputs, 1.0 - dropout)
-        return outputs
+            outputs = depthwise_separable_convolution(outputs, kernel_size = kernel_size, num_filters = num_filters, scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)
+            outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L ) + residual
+            l += 1
+        return outputs, l
 
-def self_attention_block(inputs, num_filters, seq_len, scope = "self_attention_ffn", reuse = None, is_training = True, bias = Params.bias, dropout = 0.0):
+def self_attention_block(inputs, num_filters, seq_len, scope = "self_attention_ffn", reuse = None, is_training = True, bias = Params.bias, dropout = 0.0, sublayers = (1, 1)):
     with tf.variable_scope(scope, reuse = reuse):
+        l, L = sublayers
         # Self attention
         outputs = tf.contrib.layers.layer_norm(inputs, scope = "layer_norm_1", reuse = reuse)
         outputs = multihead_attention(outputs, num_filters, num_heads = Params.num_heads, seq_len = seq_len, reuse = reuse, is_training = is_training, bias = bias, dropout = dropout)
+        outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L)
+        l += 1
         residual = outputs + inputs
         # Feed-forward
         outputs = tf.contrib.layers.layer_norm(residual, scope = "layer_norm_2", reuse = reuse)
         outputs = conv(outputs, num_filters, bias, tf.nn.relu, name = "FFN_1", reuse = reuse)
-        return  conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse) + residual
+        outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L)
+        l += 1
+        outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)
+        outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L) + residual
+        l += 1
+        return outputs, l
 
-def multihead_attention(queries, units, num_heads, seq_len = None, scope = "Multi_Head_Attention", reuse = None, is_training = True, bias = Params.bias, dropout = 0.0):
+def multihead_attention(queries, units, num_heads,
+                        seq_len = None,
+                        scope = "Multi_Head_Attention",
+                        reuse = None,
+                        is_training = True,
+                        bias = Params.bias,
+                        dropout = 0.0):
     with tf.variable_scope(scope, reuse = reuse):
         combined = conv(queries, 3 * units, name = "projection", reuse = reuse)
         Q, K, V = [split_last_dimension(tensor, num_heads) for tensor in tf.split(combined,3,axis = 2)]
         key_depth_per_head = units // num_heads
         Q *= key_depth_per_head**-0.5
-        x = dot_product_attention(Q,K,V,bias = bias, seq_len = seq_len, is_training = is_training, scope = "dot_product_attention", reuse = reuse, dropout = dropout)
+        x = dot_product_attention(Q,K,V,
+                                  bias = bias,
+                                  seq_len = seq_len,
+                                  is_training = is_training,
+                                  scope = "dot_product_attention",
+                                  reuse = reuse, dropout = dropout)
         # Apply branched attention from https://arxiv.org/pdf/1711.02132v1.pdf
         # NOTE Branched attention is disabled until further experiments
         # if Params.attention == "branched":
@@ -95,7 +131,6 @@ def multihead_attention(queries, units, num_heads, seq_len = None, scope = "Mult
         #     x = conv(x, units, name = "output_projection", reuse = reuse) * kappa
         #     x = conv(x, units, bias = True, activation = tf.nn.relu, name ="Feed_forward_network", reuse = reuse) * alpha
         #     return tf.reduce_sum(x, axis = 1) + queries
-        # else:
         return combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
 
 def conv(inputs, output_size, bias = None, activation = None, name = "conv", reuse = None):
@@ -113,16 +148,16 @@ def conv(inputs, output_size, bias = None, activation = None, name = "conv", reu
             strides = 1
         conv_func = tf.nn.conv1d if len(shapes) == 3 else tf.nn.conv2d
         kernel_ = tf.get_variable("kernel_",
-                                    filter_shape,
-                                    dtype = tf.float32,
-                                    regularizer=regularizer,
-                                    initializer = initializer_relu if activation is not None else initializer)
+                        filter_shape,
+                        dtype = tf.float32,
+                        regularizer=regularizer,
+                        initializer = initializer_relu if activation is not None else initializer)
         outputs = conv_func(inputs, kernel_, strides, "VALID")
         if bias:
             outputs += tf.get_variable("bias_",
-                                    bias_shape,
-                                    regularizer=regularizer,
-                                    initializer = initializer_relu if activation is not None else initializer)
+                        bias_shape,
+                        regularizer=regularizer,
+                        initializer = initializer_relu if activation is not None else initializer)
         if activation is not None:
             return activation(outputs)
         else:

@@ -61,13 +61,13 @@ class Model(object):
 
             # Embed the question and passage information for word and character tokens
             self.passage_word_encoded, self.passage_char_encoded = encoding(self.passage_w,
-                                            self.passage_c,
-                                            word_embeddings = self.word_embeddings,
-                                            char_embeddings = self.char_embeddings)
+                self.passage_c,
+                word_embeddings = self.word_embeddings,
+                char_embeddings = self.char_embeddings)
             self.question_word_encoded, self.question_char_encoded = encoding(self.question_w,
-                                            self.question_c,
-                                            word_embeddings = self.word_embeddings,
-                                            char_embeddings = self.char_embeddings)
+                self.question_c,
+                word_embeddings = self.word_embeddings,
+                char_embeddings = self.char_embeddings)
 
             self.passage_char_encoded = tf.reduce_max(self.passage_char_encoded, axis = 2)
             self.question_char_encoded = tf.reduce_max(self.question_char_encoded, axis = 2)
@@ -80,30 +80,30 @@ class Model(object):
             self.passage_encoding = tf.concat((self.passage_word_encoded, self.passage_char_encoded), axis = -1)
             self.question_encoding = tf.concat((self.question_word_encoded, self.question_char_encoded), axis = -1)
 
-            # self.passage_encoding = highway(self.passage_encoding, 128, project = True, scope = "highway", reuse = None)
-            # self.question_encoding = highway(self.question_encoding, 128, project = True, scope = "highway", reuse = True)
+            self.passage_encoding = highway(self.passage_encoding, scope = "highway", reuse = None)
+            self.question_encoding = highway(self.question_encoding, scope = "highway", reuse = True)
 
     def embedding_encoder(self):
         with tf.variable_scope("Embedding_Encoder_Layer"):
             self.passage_context = residual_block(self.passage_encoding,
-                                                  num_blocks = 1,
-                                                  num_conv_layers = 4,
-                                                  kernel_size = 7,
-                                                  input_projection = True,
-                                                  seq_len = self.passage_len,
-                                                  scope = "Encoder_Residual_Block",
-                                                  bias = False,
-                                                  dropout = self.dropout)
+                num_blocks = 1,
+                num_conv_layers = 4,
+                kernel_size = 7,
+                input_projection = True,
+                seq_len = self.passage_len,
+                scope = "Encoder_Residual_Block",
+                bias = False,
+                dropout = self.dropout)
             self.question_context = residual_block(self.question_encoding,
-                                                  num_blocks = 1,
-                                                  num_conv_layers = 4,
-                                                  kernel_size = 7,
-                                                  input_projection = True,
-                                                  seq_len = self.question_len,
-                                                  scope = "Encoder_Residual_Block",
-                                                  reuse = True,
-                                                  bias = False,
-                                                  dropout = self.dropout)
+                num_blocks = 1,
+                num_conv_layers = 4,
+                kernel_size = 7,
+                input_projection = True,
+                seq_len = self.question_len,
+                scope = "Encoder_Residual_Block",
+                reuse = True,
+                bias = False,
+                dropout = self.dropout)
 
     def context_to_query(self):
         with tf.variable_scope("Context_to_Query_Attention_Layer"):
@@ -112,7 +112,7 @@ class Model(object):
             S = tf.squeeze(trilinear([P, Q, P*Q], input_keep_prob = 1.0 - self.dropout))
             S_ = tf.nn.softmax(mask_logits(S, self.question_len))
             self.c2q_attention = tf.matmul(S_, self.question_context)
-            self.c2q_attention = tf.nn.dropout(self.c2q_attention, 1.0 - self.dropout)
+            # self.c2q_attention = tf.nn.dropout(self.c2q_attention, 1.0 - self.dropout)
 
     def model_encoder(self):
         with tf.variable_scope("Model_Encoder_Layer"):
@@ -120,15 +120,15 @@ class Model(object):
             self.encoder_outputs = [conv(inputs, Params.num_units, name = "input_projection")]
             for i in range(3):
                 self.encoder_outputs.append(
-                                            residual_block(self.encoder_outputs[i],
-                                                           num_blocks = 7,
-                                                           num_conv_layers = 2,
-                                                           kernel_size = 5,
-                                                           seq_len = self.passage_len,
-                                                           scope = "Model_Encoder",
-                                                           reuse = True if i > 0 else None,
-                                                           dropout = self.dropout)
-                                            )
+                    residual_block(self.encoder_outputs[i],
+                       num_blocks = 7,
+                       num_conv_layers = 2,
+                       kernel_size = 5,
+                       seq_len = self.passage_len,
+                       scope = "Model_Encoder",
+                       reuse = True if i > 0 else None,
+                       dropout = self.dropout)
+                    )
                 if i in [0,2]:
                     self.encoder_outputs[i + 1] = tf.nn.dropout(self.encoder_outputs[i + 1], 1.0 - self.dropout)
 

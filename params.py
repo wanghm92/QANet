@@ -7,7 +7,7 @@ class Params():
     data_dir = "./data/"
     train_dir = data_dir + "trainset/"
     dev_dir = data_dir + "devset/"
-    logdir = "./train/l2norm3"
+    logdir = "./train/depth_dropout"
     glove_dir = "./glove.840B.300d.txt" # Glove file name (If you want to use your own glove, replace the file name here)
     glove_char = "./glove.840B.300d.char.txt" # Character Glove file name
     coreNLP_dir = "./stanford-corenlp-full-2017-06-09" # Directory to Stanford coreNLP tool
@@ -20,14 +20,14 @@ class Params():
     p_chars_dir = "chars_context.txt"
 
     # Training
-    mode = "train" # case-insensitive options: ["train", "test", "debug"]
+    mode = "debug" # case-insensitive options: ["train", "test", "debug"]
     LearningRate = 1e-3
     l2_norm = 3e-7
     dropout = 0.1 # dropout probability, if None, don't use dropout
     decay = 0.9999 # decay rate of the exponential moving average
     optimizer = "adam" # Options: ["adadelta", "adam", "gradientdescent", "adagrad"]
     batch_size = 32 if mode is not "test" else 100 # Size of the mini-batch for training
-    save_steps = 50 # Save the model at every 50 steps
+    save_steps = 100 # Save the model at every 50 steps
     warmup_steps = 1000
     clip = True # clip gradient norm
     norm = 5.0 # global norm

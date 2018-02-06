@@ -1,6 +1,6 @@
 # FAST AND ACCURATE READING COMPREHENSION WITHOUT RECURRENT NETWORKS
 A Tensorflow implementation of Google's [Fast Reading Comprehension](https://openreview.net/pdf?id=B14TlG-RW).
-Without RNNs the model converges relatively fast compared to [R-net](https://github.com/minsangkim142/R-net).
+Without RNNs the model converges relatively quickly compared to [R-net](https://github.com/minsangkim142/R-net).
 After 12 epochs of training our model reaches dev EM/F1 = 56 / 69.
 
 ## Dataset
@@ -25,16 +25,16 @@ $ python process.py --process True --reduce_glove True
 
 ## Training / Testing / Debugging
 You can change the hyperparameters from params.py file to fit the model in your GPU. To train the model, run the following line.
+To test or debug your model after training, change mode = "train" from params.py file and run the model.
 ```shell
 $ python model.py
 ```
-To test or debug your model after training, change mode = "train" from params.py file and run the model.
 
 ## TODO's
 - [x] Training and testing the model
 - [x] Add trilinear function to Context-to-Query attention
 - [x] Convergence testing
-- [ ] Apply dropout every 2 layers
+- [x] Apply dropouts
 - [ ] Query-to-context attention
 - [ ] Data augmentation by paraphrasing
 
@@ -47,5 +47,6 @@ $ tensorboard --logdir=./
 ## Note
 **28/01/18**
 The model reaches devset performance of EM/F1=44/58 1 hour into training without dropout. Next goal is to train with dropout every 2 layers.
+
 **04/11/17**
 Currently the model is not optimized and there is a memory leak so I strongly suggest only training if your memory is 16GB >. Also I haven't done convergence testing yet. The training time is 5 ~ 6x faster on naive implementation compared to [R-net](https://github.com/minsangkim142/R-net).

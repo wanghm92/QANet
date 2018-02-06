@@ -20,7 +20,7 @@ class Params():
     p_chars_dir = "chars_context.txt"
 
     # Training
-    mode = "debug" # case-insensitive options: ["train", "test", "debug"]
+    mode = "train" # case-insensitive options: ["train", "test", "debug"]
     LearningRate = 1e-3
     l2_norm = 3e-7
     dropout = 0.1 # dropout probability, if None, don't use dropout

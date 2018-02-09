@@ -53,21 +53,23 @@ class Model(object):
 
     def encode_ids(self):
         with tf.variable_scope("Input_Embedding_Layer"):
+            self.unknown = tf.get_variable("unknown_word", (1, Params.emb_size), dtype = tf.float32, initializer = initializer())
             with tf.device('/cpu:0'):
                 self.char_embeddings = tf.get_variable("char_embeddings", (Params.char_vocab_size+1, Params.char_emb_size), dtype = tf.float32, initializer = initializer())
                 self.word_embeddings = tf.Variable(tf.constant(0.0, shape=[Params.vocab_size, Params.emb_size]),trainable=False, name="word_embeddings")
                 self.word_embeddings_placeholder = tf.placeholder(tf.float32,[Params.vocab_size, Params.emb_size],"word_embeddings_placeholder")
                 self.emb_assign = tf.assign(self.word_embeddings, self.word_embeddings_placeholder)
+                self.word_embeddings = tf.concat([self.unknown, self.word_embeddings], axis = 0)
 
             # Embed the question and passage information for word and character tokens
             self.passage_word_encoded, self.passage_char_encoded = encoding(self.passage_w,
-                                            self.passage_c,
-                                            word_embeddings = self.word_embeddings,
-                                            char_embeddings = self.char_embeddings)
+                self.passage_c,
+                word_embeddings = self.word_embeddings,
+                char_embeddings = self.char_embeddings)
             self.question_word_encoded, self.question_char_encoded = encoding(self.question_w,
-                                            self.question_c,
-                                            word_embeddings = self.word_embeddings,
-                                            char_embeddings = self.char_embeddings)
+                self.question_c,
+                word_embeddings = self.word_embeddings,
+                char_embeddings = self.char_embeddings)
 
             self.passage_char_encoded = tf.reduce_max(self.passage_char_encoded, axis = 2)
             self.question_char_encoded = tf.reduce_max(self.question_char_encoded, axis = 2)
@@ -80,30 +82,30 @@ class Model(object):
             self.passage_encoding = tf.concat((self.passage_word_encoded, self.passage_char_encoded), axis = -1)
             self.question_encoding = tf.concat((self.question_word_encoded, self.question_char_encoded), axis = -1)
 
-            # self.passage_encoding = highway(self.passage_encoding, 128, project = True, scope = "highway", reuse = None)
-            # self.question_encoding = highway(self.question_encoding, 128, project = True, scope = "highway", reuse = True)
+            self.passage_encoding = tf.nn.dropout(highway(self.passage_encoding, scope = "highway", reuse = None), 1.0 - self.dropout)
+            self.question_encoding = tf.nn.dropout(highway(self.question_encoding, scope = "highway", reuse = True), 1.0 - self.dropout)
 
     def embedding_encoder(self):
         with tf.variable_scope("Embedding_Encoder_Layer"):
             self.passage_context = residual_block(self.passage_encoding,
-                                                  num_blocks = 1,
-                                                  num_conv_layers = 4,
-                                                  kernel_size = 7,
-                                                  input_projection = True,
-                                                  seq_len = self.passage_len,
-                                                  scope = "Encoder_Residual_Block",
-                                                  bias = False,
-                                                  dropout = self.dropout)
+                num_blocks = 1,
+                num_conv_layers = 4,
+                kernel_size = 7,
+                input_projection = True,
+                seq_len = self.passage_len,
+                scope = "Encoder_Residual_Block",
+                bias = False,
+                dropout = self.dropout)
             self.question_context = residual_block(self.question_encoding,
-                                                  num_blocks = 1,
-                                                  num_conv_layers = 4,
-                                                  kernel_size = 7,
-                                                  input_projection = True,
-                                                  seq_len = self.question_len,
-                                                  scope = "Encoder_Residual_Block",
-                                                  reuse = True,
-                                                  bias = False,
-                                                  dropout = self.dropout)
+                num_blocks = 1,
+                num_conv_layers = 4,
+                kernel_size = 7,
+                input_projection = True,
+                seq_len = self.question_len,
+                scope = "Encoder_Residual_Block",
+                reuse = True, # Share the weights between passage and question
+                bias = False, # Cannot use bias due to shape mismatch in self attention (300 vs 30)
+                dropout = self.dropout)
 
     def context_to_query(self):
         with tf.variable_scope("Context_to_Query_Attention_Layer"):
@@ -120,27 +122,24 @@ class Model(object):
             self.encoder_outputs = [conv(inputs, Params.num_units, name = "input_projection")]
             for i in range(3):
                 self.encoder_outputs.append(
-                                            residual_block(self.encoder_outputs[i],
-                                                           num_blocks = 7,
-                                                           num_conv_layers = 2,
-                                                           kernel_size = 5,
-                                                           seq_len = self.passage_len,
-                                                           scope = "Model_Encoder",
-                                                           reuse = True if i > 0 else None,
-                                                           dropout = self.dropout)
-                                            )
-                if i in [0,2]:
+                    residual_block(self.encoder_outputs[i],
+                       num_blocks = 7,
+                       num_conv_layers = 2,
+                       kernel_size = 5,
+                       seq_len = self.passage_len,
+                       scope = "Model_Encoder",
+                       reuse = True if i > 0 else None,
+                       dropout = self.dropout)
+                    )
+                if i in [0,1,2]:
                     self.encoder_outputs[i + 1] = tf.nn.dropout(self.encoder_outputs[i + 1], 1.0 - self.dropout)
 
     def output_layer(self):
         with tf.variable_scope("Output_Layer"):
-            # self.start_logits = tf.layers.dense(tf.concat([self.encoder_outputs[1], self.encoder_outputs[2]],axis = -1),1, use_bias = False, name = "start_pointer")
-            # self.end_logits = tf.layers.dense(tf.concat([self.encoder_outputs[1], self.encoder_outputs[3]],axis = -1),1, use_bias = False, name = "end_pointer")
             self.start_logits = conv(tf.concat([self.encoder_outputs[1], self.encoder_outputs[2]],axis = -1),1, bias = False, name = "start_pointer")
             self.end_logits = conv(tf.concat([self.encoder_outputs[1], self.encoder_outputs[3]],axis = -1),1, bias = False, name = "end_pointer")
             logits = tf.stack([self.start_logits, self.end_logits],axis = 1)
             self.logits = mask_logits(tf.squeeze(logits), self.passage_len)
-            # self.logits = tf.nn.softmax(logits)
 
             self.logit_1, self.logit_2 = tf.split(tf.nn.softmax(self.logits), 2, axis = 1)
             self.logit_1 = tf.transpose(self.logit_1, [0, 2, 1])
@@ -149,7 +148,6 @@ class Model(object):
             self.output_index_1 = tf.argmax(tf.reduce_max(self.dp, axis = 2), -1)
             self.output_index_2 = tf.argmax(tf.reduce_max(self.dp, axis = 1), -1)
             self.output_index = tf.stack([self.output_index_1, self.output_index_2], axis = 1)
-            # self.output_index_greedy = tf.argmax(self.logits, axis = 2)
 
     def loss_function(self):
         with tf.variable_scope("loss"):
@@ -157,9 +155,8 @@ class Model(object):
             self.indices_prob = [tf.squeeze(i, 1) for i in tf.split(tf.one_hot(self.indices, shapes[1]), 2, axis = 1)]
             self.logits = [tf.squeeze(l, 1) for l in tf.split(self.logits, 2, axis = 1)]
 
-            self.mean_losses = [tf.nn.softmax_cross_entropy_with_logits(logits = l, labels = i) for l,i in zip(self.logits, self.indices_prob)]
+            self.mean_losses = [tf.nn.softmax_cross_entropy_with_logits_v2(logits = l, labels = i) for l,i in zip(self.logits, self.indices_prob)]
             self.mean_loss = tf.reduce_mean(sum(self.mean_losses))
-            # self.mean_loss = cross_entropy(self.logits, self.indices_prob)
 
             if Params.l2_norm is not None:
                 variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)

@@ -26,7 +26,7 @@ def str2bool(v):
 		raise argparse.ArgumentTypeError('Boolean value expected.')
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-p','--process', default = False, type = str2bool, help='Use the coreNLP tokenizer.', required=False)
+parser.add_argument('-p','--process', default = False, type = str2bool, help='Generate data from json files.', required=False)
 parser.add_argument('-r','--reduce_glove', default = False, type = str2bool, help='Reduce glove size.', required=False)
 args = parser.parse_args()
 
@@ -34,7 +34,7 @@ if args.process:
 	import spacy
 	nlp = spacy.blank('en')
 
-	def tokenize_corenlp(text):
+	def tokenize(text):
 		parsed = nlp(text)
 		tokens = [i.text for i in parsed]
 		return tokens
@@ -42,10 +42,10 @@ if args.process:
 class data_loader(object):
 	def __init__(self,use_pretrained = None):
 		self.c_dict = {"_UNK":0, "_PAD":1}
-		self.w_dict = {"_UNK":0}
+		self.w_dict = {"_UNK":0, "_PAD":1}
 		self.w_occurence = 0
 		self.c_occurence = 0
-		self.w_count = 1
+		self.w_count = 2
 		self.c_count = 2
 		self.w_unknown_count = 0
 		self.c_unknown_count = 0
@@ -150,7 +150,7 @@ class data_loader(object):
 
 	def add_to_dict(self, line):
 		if args.process:
-			splitted_line = tokenize_corenlp(line)
+			splitted_line = tokenize(line)
 
 		if self.append_dict:
 			self.process_word(splitted_line)
@@ -263,7 +263,7 @@ def write_file(indices, dir_, separate = "\n"):
 		f.write(" ".join(indices) + separate)
 
 def pad_data(data, max_word):
-	padded_data = np.zeros((len(data),max_word),dtype = np.int32)
+	padded_data = np.ones((len(data),max_word),dtype = np.int32)
 	for i,line in enumerate(data):
 		for j,word in enumerate(line):
 			if j >= max_word:
@@ -369,7 +369,6 @@ def main():
 			print("Tokenizing complete")
 	if os.path.isfile(Params.data_dir + "glove.np"): exit()
 	load_glove(Params.glove_dir,"glove",vocab_size = Params.vocab_size)
-	load_glove(Params.glove_char,"glove_char", vocab_size = Params.char_vocab_size)
 	print("Processing complete")
 	print("Unknown word ratio: {} / {}".format(loader.w_unknown_count,loader.w_occurence))
 	print("Unknown character ratio: {} / {}".format(loader.c_unknown_count,loader.c_occurence))

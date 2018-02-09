@@ -25,7 +25,7 @@ class Params():
     dropout = 0.1 # dropout probability, if None, don't use dropout
     decay = 0.9999 # decay rate of the exponential moving average
     optimizer = "adam" # Options: ["adadelta", "adam", "gradientdescent", "adagrad"]
-    batch_size = 32 if mode is not "test" else 100 # Size of the mini-batch for training
+    batch_size = 16 if mode is not "test" else 100 # Size of the mini-batch for training
     save_steps = 100 # Save the model at every 50 steps
     warmup_steps = 1000
     clip = True # clip gradient norm

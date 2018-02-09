@@ -117,13 +117,13 @@ def load_data(dir_):
 
     # Load question data
     print("Loading question data...")
-    q_word_ids, _ = load_word(dir_ + Params.q_word_dir)
-    q_char_ids, q_char_len, q_word_len = load_char(dir_ + Params.q_chars_dir)
+    q_word_ids, q_word_len = load_word(dir_ + Params.q_word_dir)
+    q_char_ids, q_char_len, _ = load_char(dir_ + Params.q_chars_dir)
 
     # Load passage data
     print("Loading passage data...")
-    p_word_ids, _ = load_word(dir_ + Params.p_word_dir)
-    p_char_ids, p_char_len, p_word_len = load_char(dir_ + Params.p_chars_dir)
+    p_word_ids, p_word_len = load_word(dir_ + Params.p_word_dir)
+    p_char_ids, p_char_len, _ = load_char(dir_ + Params.p_chars_dir)
 
     # Get max length to pad
     p_max_word = Params.max_p_len#np.max(p_word_len)
@@ -146,7 +146,7 @@ def load_data(dir_):
     # shapes of each data
     shapes=[(p_max_word,),(q_max_word,),
             (p_max_word,p_max_char,),(q_max_word,q_max_char,),
-            (1,),(1,),
+            (),(),
             (2,)]
 
     return ([p_word_ids, q_word_ids,
@@ -161,7 +161,7 @@ def get_dev():
 
     dev_ind = np.arange(indices.shape[0],dtype = np.int32)
     np.random.shuffle(dev_ind)
-    return devset, dev_ind
+    return devset, dev_ind, shapes
 
 def get_batch(is_training = True):
     """Loads training data and put them in queues"""

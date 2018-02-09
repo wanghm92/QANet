@@ -103,8 +103,8 @@ class Model(object):
                 input_projection = True,
                 seq_len = self.question_len,
                 scope = "Encoder_Residual_Block",
-                reuse = True,
-                bias = False,
+                reuse = True, # Share the weights between passage and question
+                bias = False, # Cannot use bias due to shape mismatch in self attention (300 vs 30)
                 dropout = self.dropout)
 
     def context_to_query(self):
@@ -131,7 +131,7 @@ class Model(object):
                        reuse = True if i > 0 else None,
                        dropout = self.dropout)
                     )
-                if i in [0,2]:
+                if i in [0,1,2]:
                     self.encoder_outputs[i + 1] = tf.nn.dropout(self.encoder_outputs[i + 1], 1.0 - self.dropout)
 
     def output_layer(self):

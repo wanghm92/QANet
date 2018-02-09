@@ -1,6 +1,6 @@
 # FAST AND ACCURATE READING COMPREHENSION WITHOUT RECURRENT NETWORKS
-A Tensorflow implementation of Google's [Fast Reading Comprehension](https://openreview.net/pdf?id=B14TlG-RW).
-Without RNNs the model converges relatively quickly compared to [R-net](https://github.com/minsangkim142/R-net).
+A Tensorflow implementation of Google's [Fast Reading Comprehension](https://openreview.net/pdf?id=B14TlG-RW) from [ICLR2018](https://openreview.net/forum?id=B14TlG-RW).
+Without RNNs the model computes relatively quickly compared to [R-net](https://github.com/minsangkim142/R-net)(about 5 times faster in naive implementation).
 After 12 epochs of training our model reaches dev EM/F1 = 56 / 69.
 
 ## Dataset
@@ -45,6 +45,9 @@ $ tensorboard --logdir=./
 ```
 
 ## Note
+**28/01/18**
+The model quickly reaches EM/F1 = 55/69 on devset, but never gets beyond that even with strong regularization. Also the training speed (1.8 batch per second) is slower than the paper suggests (3.2 batch per second).
+
 **28/01/18**
 The model reaches devset performance of EM/F1=44/58 1 hour into training without dropout. Next goal is to train with dropout every 2 layers.
 

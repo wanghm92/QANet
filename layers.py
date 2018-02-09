@@ -40,6 +40,15 @@ initializer_relu = tf.contrib.layers.variance_scaling_initializer(factor=2.0,
 regularizer = tf.contrib.layers.l2_regularizer(
                scale = Params.l2_norm if Params.l2_norm is not None else 0.0)
 
+def noam_norm(x, epsilon=1.0, scope=None, reuse=None):
+    """One version of layer normalization."""
+    with tf.name_scope(scope, default_name="noam_norm", values=[x]):
+        shape = x.get_shape()
+        ndims = len(shape)
+        return tf.nn.l2_normalize(x, ndims - 1, epsilon=epsilon) * tf.sqrt(tf.to_float(shape[-1]))
+
+norm_fn = tf.contrib.layers.layer_norm #tf.contrib.layers.layer_norm or noam_norm
+
 def highway(x, size = None, activation = tf.nn.relu,
             num_layers = 2, scope = "highway", reuse = None):
     with tf.variable_scope(scope, reuse):
@@ -88,10 +97,10 @@ def conv_block(inputs, num_conv_layers, kernel_size, num_filters,
         l, L = sublayers
         for i in range(num_conv_layers):
             residual = outputs
-            outputs = tf.contrib.layers.layer_norm(outputs, scope = "layer_norm_%d"%i, reuse = reuse)
+            outputs = norm_fn(outputs, scope = "layer_norm_%d"%i, reuse = reuse)
             outputs = depthwise_separable_convolution(outputs,
                 kernel_size = kernel_size, num_filters = num_filters,
-                scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)
+                scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)# + residual
             outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L ) + residual
             l += 1
         return outputs, l
@@ -102,7 +111,7 @@ def self_attention_block(inputs, num_filters, seq_len,
     with tf.variable_scope(scope, reuse = reuse):
         l, L = sublayers
         # Self attention
-        outputs = tf.contrib.layers.layer_norm(inputs, scope = "layer_norm_1", reuse = reuse)
+        outputs = norm_fn(inputs, scope = "layer_norm_1", reuse = reuse)
         outputs = multihead_attention(outputs, num_filters,
             num_heads = Params.num_heads, seq_len = seq_len, reuse = reuse,
             is_training = is_training, bias = bias, dropout = dropout)
@@ -110,11 +119,11 @@ def self_attention_block(inputs, num_filters, seq_len,
         l += 1
         residual = outputs + inputs
         # Feed-forward
-        outputs = tf.contrib.layers.layer_norm(residual, scope = "layer_norm_2", reuse = reuse)
+        outputs = norm_fn(residual, scope = "layer_norm_2", reuse = reuse)
         outputs = conv(outputs, num_filters, bias, tf.nn.relu, name = "FFN_1", reuse = reuse)
         outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L)
         l += 1
-        outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)
+        outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)# + residual
         outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L) + residual
         l += 1
         return outputs, l
@@ -184,14 +193,13 @@ def mask_logits(inputs, sequence_length, mask_value = -1e7):
                      tf.sequence_mask(sequence_length,
                                       maxlen=shapes[-1],
                                       dtype = tf.float32),
-                     [-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]]
+                                      [-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]]
                      )
     mask_values = mask_value * (1.0 - mask)
     return inputs + mask_values
-    # return inputs
 
 def cross_entropy(output, target):
-    cross_entropy = target * tf.log(output + 1e-7)
+    cross_entropy = target * tf.log(output + 1e-9)
     cross_entropy = -tf.reduce_sum(cross_entropy, [1,2])
     return tf.reduce_mean(cross_entropy)
 
@@ -200,7 +208,6 @@ def depthwise_separable_convolution(inputs, kernel_size, num_filters,
                                     is_training = True, reuse = None):
     with tf.variable_scope(scope, reuse = reuse):
         outputs = tf.expand_dims(inputs, axis = 2)
-        # for i in range(num_layers):
         shapes = outputs.shape.as_list()
         depthwise_filter = tf.get_variable("depthwise_filter",
                                         (kernel_size, 1, shapes[-1], 1),
@@ -247,7 +254,7 @@ def dot_product_attention(q,
                           dropout = 0.0):
     """dot-product attention.
     Args:
-    q: a Tensor with shape [batch, heads, length_q, depth_k]f
+    q: a Tensor with shape [batch, heads, length_q, depth_k]
     k: a Tensor with shape [batch, heads, length_kv, depth_k]
     v: a Tensor with shape [batch, heads, length_kv, depth_v]
     bias: bias Tensor (see attention_bias())

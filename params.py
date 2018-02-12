@@ -26,7 +26,7 @@ class Params():
     decay = 0.9999 # decay rate of the exponential moving average
     optimizer = "adam" # Options: ["adadelta", "adam", "gradientdescent", "adagrad"]
     batch_size = 32 if mode is not "test" else 100 # Size of the mini-batch for training
-    save_steps = 100 # Save the model at every 50 steps
+    save_steps = 50 # Save the model at every 50 steps
     warmup_steps = 1000
     clip = True # clip gradient norm
     norm = 5.0 # global norm
@@ -38,7 +38,7 @@ class Params():
                 'adagrad':{}}
 
     # Architecture
-    num_heads = 8 # Number of heads in multihead or branched attention
+    num_heads = 1 # Number of heads in multihead or branched attention
     #NOTE branched attention is disabled
     attention = "multihead" # Which attention to use for multihead, options: ["multihead", "branched"]
     max_p_len = 300 # Maximum number of words in each passage context

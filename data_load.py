@@ -140,13 +140,13 @@ def load_data(dir_):
 
     # to numpy
     indices = np.reshape(np.asarray(indices,np.int32),(-1,2))
-    p_word_len = np.reshape(np.asarray(p_word_len,np.int32),(-1,1)) + 1
+    p_word_len = np.reshape(np.asarray(p_word_len,np.int32),(-1,1)) + 2
     q_word_len = np.reshape(np.asarray(q_word_len,np.int32),(-1,1))
 
     # shapes of each data
     shapes=[(p_max_word,),(q_max_word,),
             (p_max_word,p_max_char,),(q_max_word,q_max_char,),
-            (),(),
+            (1,),(1,),
             (2,)]
 
     return ([p_word_ids, q_word_ids,
@@ -161,7 +161,7 @@ def get_dev():
 
     dev_ind = np.arange(indices.shape[0],dtype = np.int32)
     np.random.shuffle(dev_ind)
-    return devset, dev_ind, shapes
+    return devset, dev_ind
 
 def get_batch(is_training = True):
     """Loads training data and put them in queues"""

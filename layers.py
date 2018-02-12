@@ -100,7 +100,7 @@ def conv_block(inputs, num_conv_layers, kernel_size, num_filters,
             outputs = norm_fn(outputs, scope = "layer_norm_%d"%i, reuse = reuse)
             outputs = depthwise_separable_convolution(outputs,
                 kernel_size = kernel_size, num_filters = num_filters,
-                scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)# + residual
+                scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)
             outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L ) + residual
             l += 1
         return outputs, l
@@ -123,7 +123,7 @@ def self_attention_block(inputs, num_filters, seq_len,
         outputs = conv(outputs, num_filters, bias, tf.nn.relu, name = "FFN_1", reuse = reuse)
         outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L)
         l += 1
-        outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)# + residual
+        outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)
         outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L) + residual
         l += 1
         return outputs, l
@@ -137,7 +137,10 @@ def multihead_attention(queries, units, num_heads,
                         dropout = 0.0):
     with tf.variable_scope(scope, reuse = reuse):
         combined = conv(queries, 3 * units, name = "projection", reuse = reuse)
+        print(combined)
         Q, K, V = [split_last_dimension(tensor, num_heads) for tensor in tf.split(combined,3,axis = 2)]
+        print(Q,K,V)
+#        exit()
         key_depth_per_head = units // num_heads
         Q *= key_depth_per_head**-0.5
         x = dot_product_attention(Q,K,V,

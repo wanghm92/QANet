@@ -244,8 +244,10 @@ def main():
                 if sv.should_stop(): break
                 train_loss = []
                 for step in tqdm(range(model.num_batch), total = model.num_batch, ncols=70, leave=False, unit='b'):
-                    debug, _, loss = sess.run([model.mean_losses, model.train_op, model.mean_loss],
+                    debug, _, loss = sess.run([model.logits, model.train_op, model.mean_loss],
                                         feed_dict={model.dropout: Params.dropout if Params.dropout is not None else 0.0})
+                    if np.mean(loss) > 6000:
+                        print(debug)
                     # print("\nmean: {}\n{}".format(np.mean(debug), debug))
                     train_loss.append(loss)
                     if step % Params.save_steps == 0:

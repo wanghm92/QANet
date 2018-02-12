@@ -140,8 +140,8 @@ def load_data(dir_):
 
     # to numpy
     indices = np.reshape(np.asarray(indices,np.int32),(-1,2))
-    p_word_len = np.reshape(np.asarray(p_word_len,np.int32),(-1,1)) + 2
-    q_word_len = np.reshape(np.asarray(q_word_len,np.int32),(-1,1))
+    p_word_len = np.reshape(np.asarray(p_word_len,np.int32),(-1,1)) + 1
+    q_word_len = np.reshape(np.asarray(q_word_len,np.int32),(-1,1)) + 1
 
     # shapes of each data
     shapes=[(p_max_word,),(q_max_word,),

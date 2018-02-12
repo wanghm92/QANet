@@ -137,10 +137,7 @@ def multihead_attention(queries, units, num_heads,
                         dropout = 0.0):
     with tf.variable_scope(scope, reuse = reuse):
         combined = conv(queries, 3 * units, name = "projection", reuse = reuse)
-        print(combined)
         Q, K, V = [split_last_dimension(tensor, num_heads) for tensor in tf.split(combined,3,axis = 2)]
-        print(Q,K,V)
-#        exit()
         key_depth_per_head = units // num_heads
         Q *= key_depth_per_head**-0.5
         x = dot_product_attention(Q,K,V,
@@ -158,7 +155,8 @@ def multihead_attention(queries, units, num_heads,
         #     x = conv(x, units, name = "output_projection", reuse = reuse) * kappa
         #     x = conv(x, units, bias = True, activation = tf.nn.relu, name ="Feed_forward_network", reuse = reuse) * alpha
         #     return tf.reduce_sum(x, axis = 1) + queries
-        return combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
+        x = combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
+        return conv(x, units, name = "combine", reuse = reuse)
 
 def conv(inputs, output_size, bias = None, activation = None, name = "conv", reuse = None):
     with tf.variable_scope(name, reuse = reuse):

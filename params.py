@@ -7,7 +7,7 @@ class Params():
     data_dir = "./data/"
     train_dir = data_dir + "trainset/"
     dev_dir = data_dir + "devset/"
-    logdir = "./train/train"
+    logdir = "./train/debug"
     glove_dir = "./glove.840B.300d.txt" # Glove file name (If you want to use your own glove, replace the file name here)
     glove_char = "./glove.840B.300d.char.txt" # Character Glove file name
 
@@ -19,7 +19,7 @@ class Params():
     p_chars_dir = "chars_context.txt"
 
     # Training
-    mode = "train" # case-insensitive options: ["train", "test", "debug"]
+    mode = "debug" # case-insensitive options: ["train", "test", "debug"]
     LearningRate = 1e-3
     l2_norm = 3e-7
     dropout = 0.1 # dropout probability, if None, don't use dropout
@@ -38,7 +38,7 @@ class Params():
                 'adagrad':{}}
 
     # Architecture
-    num_heads = 1 # Number of heads in multihead or branched attention
+    num_heads = 8 # Number of heads in multihead or branched attention
     #NOTE branched attention is disabled
     attention = "multihead" # Which attention to use for multihead, options: ["multihead", "branched"]
     max_p_len = 300 # Maximum number of words in each passage context

@@ -46,6 +46,8 @@ Run tensorboard for visualisation.
 $ tensorboard --logdir=./
 ```
 
+![Alt text](/../dev/screenshots/tensorboard.png?raw=true "Training Curve")
+
 ## Note
 **28/01/18**
 The model quickly reaches EM/F1 = 55/69 on devset, but never gets beyond that even with strong regularization. Also the training speed (1.8 batch per second) is slower than the paper suggests (3.2 batch per second).

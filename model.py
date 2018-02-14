@@ -155,9 +155,10 @@ class Model(object):
             self.indices_prob = [tf.squeeze(i, 1) for i in tf.split(tf.one_hot(self.indices, shapes[1]), 2, axis = 1)]
             self.logits = [tf.squeeze(l, 1) for l in tf.split(self.logits, 2, axis = 1)]
 
-            self.mean_losses = [tf.nn.softmax_cross_entropy_with_logits(logits = l, labels = i) for l,i in zip(self.logits, self.indices_prob)]
+            self.mean_losses = [tf.nn.softmax_cross_entropy_with_logits_v2(logits = l, labels = i) for l,i in zip(self.logits, self.indices_prob)]
             self.mean_loss = tf.reduce_mean(sum(self.mean_losses))
 
+            # apply l2 regularization
             if Params.l2_norm is not None:
                 variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
                 l2_loss = tf.contrib.layers.apply_regularization(regularizer, variables)
@@ -243,8 +244,11 @@ def main():
                 if sv.should_stop(): break
                 train_loss = []
                 for step in tqdm(range(model.num_batch), total = model.num_batch, ncols=70, leave=False, unit='b'):
-                    _, loss = sess.run([model.train_op, model.mean_loss],
+                    debug, _, loss = sess.run([model.logits, model.train_op, model.mean_loss],
                                         feed_dict={model.dropout: Params.dropout if Params.dropout is not None else 0.0})
+                    if np.mean(loss) > 6000:
+                        print(debug)
+                    # print("\nmean: {}\n{}".format(np.mean(debug), debug))
                     train_loss.append(loss)
                     if step % Params.save_steps == 0:
                         gs = sess.run(model.global_step)
@@ -252,6 +256,7 @@ def main():
                         sample = np.random.choice(dev_ind, Params.batch_size)
                         feed_dict = {data: devdata[i][sample] for i,data in enumerate(model.data)}
                         index, dev_loss = sess.run([model.output_index, model.mean_loss], feed_dict = feed_dict)
+                        #index = np.argmax(logits, axis = 2)
                         F1, EM = 0.0, 0.0
                         for batch in range(Params.batch_size):
                             f1, em = f1_and_EM(index[batch], devdata[6][sample][batch], devdata[0][sample][batch], dict_)

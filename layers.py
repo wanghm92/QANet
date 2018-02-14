@@ -100,7 +100,7 @@ def conv_block(inputs, num_conv_layers, kernel_size, num_filters,
             outputs = norm_fn(outputs, scope = "layer_norm_%d"%i, reuse = reuse)
             outputs = depthwise_separable_convolution(outputs,
                 kernel_size = kernel_size, num_filters = num_filters,
-                scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)# + residual
+                scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)
             outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L ) + residual
             l += 1
         return outputs, l
@@ -123,7 +123,7 @@ def self_attention_block(inputs, num_filters, seq_len,
         outputs = conv(outputs, num_filters, bias, tf.nn.relu, name = "FFN_1", reuse = reuse)
         outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L)
         l += 1
-        outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)# + residual
+        outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)
         outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L) + residual
         l += 1
         return outputs, l
@@ -155,7 +155,8 @@ def multihead_attention(queries, units, num_heads,
         #     x = conv(x, units, name = "output_projection", reuse = reuse) * kappa
         #     x = conv(x, units, bias = True, activation = tf.nn.relu, name ="Feed_forward_network", reuse = reuse) * alpha
         #     return tf.reduce_sum(x, axis = 1) + queries
-        return combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
+        x = combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
+        return conv(x, units, name = "combine", reuse = reuse)
 
 def conv(inputs, output_size, bias = None, activation = None, name = "conv", reuse = None):
     with tf.variable_scope(name, reuse = reuse):
@@ -187,7 +188,7 @@ def conv(inputs, output_size, bias = None, activation = None, name = "conv", reu
         else:
             return outputs
 
-def mask_logits(inputs, sequence_length, mask_value = -1e30):
+def mask_logits(inputs, sequence_length, mask_value = -1e7):
     shapes = inputs.shape.as_list()
     mask = tf.reshape(
                      tf.sequence_mask(sequence_length,

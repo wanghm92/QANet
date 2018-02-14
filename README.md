@@ -3,6 +3,8 @@ A Tensorflow implementation of Google's [Fast Reading Comprehension](https://ope
 Without RNNs the model computes relatively quickly compared to [R-net](https://github.com/minsangkim142/R-net)(about 5 times faster in naive implementation).
 After 12 epochs of training our model reaches dev EM/F1 = 56 / 69.
 
+![Alt text](/../master/screenshots/figure.png?raw=true "Network Outline")
+
 ## Dataset
 The dataset used for this task is [Stanford Question Answering Dataset](https://rajpurkar.github.io/SQuAD-explorer/).
 Pretrained [GloVe embeddings](https://nlp.stanford.edu/projects/glove/) obtained from common crawl with 840B tokens are used for words.
@@ -43,6 +45,8 @@ Run tensorboard for visualisation.
 ```shell
 $ tensorboard --logdir=./
 ```
+
+![Alt text](/../master/screenshots/tensorboard.png?raw=true "Training Curve")
 
 ## Note
 **28/01/18**

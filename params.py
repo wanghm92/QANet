@@ -49,4 +49,4 @@ class Params():
     emb_size = 300 # Embeddings size for words
     char_emb_size = 200 # Embeddings size for words
     bias = True # Use bias term in attention
-    num_units = 128 # Number of units to use throughout the networks
+    num_units = 128 # Number of units throughout the networks

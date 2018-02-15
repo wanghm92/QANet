@@ -47,7 +47,26 @@ def noam_norm(x, epsilon=1.0, scope=None, reuse=None):
         ndims = len(shape)
         return tf.nn.l2_normalize(x, ndims - 1, epsilon=epsilon) * tf.sqrt(tf.to_float(shape[-1]))
 
-norm_fn = tf.contrib.layers.layer_norm #tf.contrib.layers.layer_norm or noam_norm
+def layer_norm_compute_python(x, epsilon, scale, bias):
+    """Layer norm raw computation."""
+    mean = tf.reduce_mean(x, axis=[-1], keep_dims=True)
+    variance = tf.reduce_mean(tf.square(x - mean), axis=[-1], keep_dims=True)
+    norm_x = (x - mean) * tf.rsqrt(variance + epsilon)
+    return norm_x * scale + bias
+
+def layer_norm(x, filters=None, epsilon=1e-6, scope=None, reuse=None):
+    """Layer normalize the tensor x, averaging over the last dimension."""
+    if filters is None:
+        filters = x.get_shape()[-1]
+    with tf.variable_scope(scope, default_name="layer_norm", values=[x], reuse=reuse):
+        scale = tf.get_variable(
+            "layer_norm_scale", [filters], initializer=tf.ones_initializer())
+        bias = tf.get_variable(
+            "layer_norm_bias", [filters], initializer=tf.zeros_initializer())
+        result = layer_norm_compute_python(x, epsilon, scale, bias)
+        return result
+
+norm_fn = layer_norm#tf.contrib.layers.layer_norm #tf.contrib.layers.layer_norm or noam_norm
 
 def highway(x, size = None, activation = tf.nn.relu,
             num_layers = 2, scope = "highway", reuse = None):
@@ -64,6 +83,10 @@ def highway(x, size = None, activation = tf.nn.relu,
             x = H * T + x * (1.0 - T)
         return x
 
+def layer_dropout(inputs, residual, dropout):
+    pred = tf.random_uniform([]) < dropout
+    return tf.cond(pred, lambda: residual, lambda: inputs + residual)
+
 def encoding(word, char, word_embeddings, char_embeddings, scope = "embedding"):
     word_encoding = tf.nn.embedding_lookup(word_embeddings, word)
     char_encoding = tf.nn.embedding_lookup(char_embeddings, char)
@@ -78,7 +101,7 @@ def residual_block(inputs, num_blocks, num_conv_layers, kernel_size,
             inputs = conv(inputs, num_filters, name = "input_projection", reuse = reuse)
         outputs = inputs
         sublayer = 1
-        total_sublayers = (num_conv_layers + 3) * num_blocks
+        total_sublayers = (num_conv_layers + 2) * num_blocks
         for i in range(num_blocks):
             outputs = add_timing_signal_1d(outputs)
             outputs, sublayer = conv_block(outputs, num_conv_layers, kernel_size, num_filters,
@@ -101,7 +124,8 @@ def conv_block(inputs, num_conv_layers, kernel_size, num_filters,
             outputs = depthwise_separable_convolution(outputs,
                 kernel_size = kernel_size, num_filters = num_filters,
                 scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)
-            outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L ) + residual
+            outputs = tf.nn.dropout(outputs, 1 - dropout)
+            outputs = layer_dropout(outputs, residual, dropout * float(l) / L)
             l += 1
         return outputs, l
 
@@ -115,16 +139,15 @@ def self_attention_block(inputs, num_filters, seq_len,
         outputs = multihead_attention(outputs, num_filters,
             num_heads = Params.num_heads, seq_len = seq_len, reuse = reuse,
             is_training = is_training, bias = bias, dropout = dropout)
-        outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L)
+        outputs = tf.nn.dropout(outputs, 1 - dropout)
+        residual = layer_dropout(outputs, inputs, dropout * float(l) / L)
         l += 1
-        residual = outputs + inputs
         # Feed-forward
         outputs = norm_fn(residual, scope = "layer_norm_2", reuse = reuse)
         outputs = conv(outputs, num_filters, bias, tf.nn.relu, name = "FFN_1", reuse = reuse)
-        outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L)
-        l += 1
         outputs = conv(outputs, num_filters, bias, None, name = "FFN_2", reuse = reuse)
-        outputs = tf.nn.dropout(outputs, 1.0 - dropout * float(l) / L) + residual
+        outputs = tf.nn.dropout(outputs, 1 - dropout)
+        outputs = layer_dropout(outputs, residual, dropout * float(l) / L)
         l += 1
         return outputs, l
 

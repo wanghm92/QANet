@@ -36,7 +36,7 @@ $ python model.py
 - [x] Training and testing the model
 - [x] Add trilinear function to Context-to-Query attention
 - [x] Convergence testing
-- [x] Apply dropouts
+- [x] Apply dropouts + stochastic depth dropout
 - [ ] Query-to-context attention
 - [ ] Data augmentation by paraphrasing
 
@@ -49,8 +49,8 @@ $ tensorboard --logdir=./
 ![Alt text](/../master/screenshots/tensorboard.png?raw=true "Training Curve")
 
 ## Note
-**28/01/18**
-The model quickly reaches EM/F1 = 55/69 on devset, but never gets beyond that even with strong regularization. Also the training speed (1.8 batch per second) is slower than the paper suggests (3.2 batch per second).
+**2/02/18**
+The model quickly reaches EM/F1 = 55/69 on devset, but never gets beyond that even with strong regularization. Also the training speed (1.8 batch per second in GTX1080) is slower than the paper suggests (3.2 batch per second in P100).
 
 **28/01/18**
 The model reaches devset performance of EM/F1=44/58 1 hour into training without dropout. Next goal is to train with dropout every 2 layers.

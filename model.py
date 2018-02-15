@@ -131,8 +131,7 @@ class Model(object):
                        reuse = True if i > 0 else None,
                        dropout = self.dropout)
                     )
-                if i in [0,1,2]:
-                    self.encoder_outputs[i + 1] = tf.nn.dropout(self.encoder_outputs[i + 1], 1.0 - self.dropout)
+                self.encoder_outputs[i + 1] = tf.nn.dropout(self.encoder_outputs[i + 1], 1.0 - self.dropout)
 
     def output_layer(self):
         with tf.variable_scope("Output_Layer"):
@@ -155,7 +154,7 @@ class Model(object):
             self.indices_prob = [tf.squeeze(i, 1) for i in tf.split(tf.one_hot(self.indices, shapes[1]), 2, axis = 1)]
             self.logits = [tf.squeeze(l, 1) for l in tf.split(self.logits, 2, axis = 1)]
 
-            self.mean_losses = [tf.nn.softmax_cross_entropy_with_logits_v2(logits = l, labels = i) for l,i in zip(self.logits, self.indices_prob)]
+            self.mean_losses = [tf.nn.softmax_cross_entropy_with_logits(logits = l, labels = i) for l,i in zip(self.logits, self.indices_prob)]
             self.mean_loss = tf.reduce_mean(sum(self.mean_losses))
 
             # apply l2 regularization

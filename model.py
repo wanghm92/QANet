@@ -82,8 +82,8 @@ class Model(object):
             self.passage_encoding = tf.concat((self.passage_word_encoded, self.passage_char_encoded), axis = -1)
             self.question_encoding = tf.concat((self.question_word_encoded, self.question_char_encoded), axis = -1)
 
-            self.passage_encoding = tf.nn.dropout(highway(self.passage_encoding, scope = "highway", reuse = None), 1.0 - self.dropout)
-            self.question_encoding = tf.nn.dropout(highway(self.question_encoding, scope = "highway", reuse = True), 1.0 - self.dropout)
+            self.passage_encoding = tf.nn.dropout(highway(self.passage_encoding, scope = "highway", reuse = None), 1.0 - self.dropout) + self.passage_encoding
+            self.question_encoding = tf.nn.dropout(highway(self.question_encoding, scope = "highway", reuse = True), 1.0 - self.dropout) + self.question_encoding
 
     def embedding_encoder(self):
         with tf.variable_scope("Embedding_Encoder_Layer"):
@@ -230,6 +230,8 @@ def main():
         init = True
         glove = np.memmap(Params.data_dir + "glove.np", dtype = np.float32, mode = "r")
         glove = np.reshape(glove,(Params.vocab_size,Params.emb_size))
+        glove = (glove - np.expand_dims(glove.mean(-1), -1)) / np.expand_dims(glove.std(-1),-1)
+        glove[0] = np.zeros(Params.emb_size, dtype = np.float32)
     with model.graph.as_default():
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True

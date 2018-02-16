@@ -179,7 +179,12 @@ def multihead_attention(queries, units, num_heads,
         #     x = conv(x, units, bias = True, activation = tf.nn.relu, name ="Feed_forward_network", reuse = reuse) * alpha
         #     return tf.reduce_sum(x, axis = 1) + queries
         x = combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
-        return conv(x, units, name = "combine", reuse = reuse)
+
+        # Added self gating mechanism from R-net
+        res = tf.concat([x, queries], axis = -1)
+        gate = tf.sigmoid(conv(res, units, name = "combine", reuse = reuse))
+        return x * gate
+        # return conv(x, units, name = "combine", reuse = reuse)
 
 def conv(inputs, output_size, bias = None, activation = None, name = "conv", reuse = None):
     with tf.variable_scope(name, reuse = reuse):
@@ -211,7 +216,7 @@ def conv(inputs, output_size, bias = None, activation = None, name = "conv", reu
         else:
             return outputs
 
-def mask_logits(inputs, sequence_length, mask_value = -1e7):
+def mask_logits(inputs, sequence_length, mask_value = -1e30):
     shapes = inputs.shape.as_list()
     mask = tf.reshape(
                      tf.sequence_mask(sequence_length,
@@ -221,11 +226,6 @@ def mask_logits(inputs, sequence_length, mask_value = -1e7):
                      )
     mask_values = mask_value * (1.0 - mask)
     return inputs + mask_values
-
-def cross_entropy(output, target):
-    cross_entropy = target * tf.log(output + 1e-9)
-    cross_entropy = -tf.reduce_sum(cross_entropy, [1,2])
-    return tf.reduce_mean(cross_entropy)
 
 def depthwise_separable_convolution(inputs, kernel_size, num_filters,
                                     scope = "depthwise_separable_convolution",
@@ -288,6 +288,8 @@ def dot_product_attention(q,
     A Tensor.
     """
     with tf.variable_scope(scope, default_name="dot_product_attention", reuse = reuse):
+        q = tf.nn.relu(q)
+        k = tf.nn.relu(k)
         # [batch, num_heads, query_length, memory_length]
         logits = tf.matmul(q, k, transpose_b=True)
         if bias:

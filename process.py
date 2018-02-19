@@ -316,7 +316,8 @@ def load_word(dir):
         line = f.readline()
         while count < 1000 if Params.mode == "debug" else line:
             line = [int(w) for w in line.split()]
-            data.append(line)
+            if line:
+                data.append(line)
             count += 1
             w_len.append(len(line))
             line = f.readline()
@@ -336,7 +337,8 @@ def load_char(dir):
             for word in line:
                 c = [int(w) for w in word.split()]
                 c_len.append(len(c))
-                chars.append(c)
+                if c:
+                    chars.append(c)
             data.append(chars)
             line = f.readline()
             count += 1

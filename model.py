@@ -45,8 +45,8 @@ class Model(object):
             self.model_encoder()
             self.output_layer()
 
+            self.loss_function()
             if is_training:
-                self.loss_function()
                 self.summary()
                 self.init_op = tf.global_variables_initializer()
             total_params()
@@ -166,10 +166,20 @@ class Model(object):
             # apply ema
             if Params.decay is not None:
                 self.var_ema = tf.train.ExponentialMovingAverage(Params.decay)
-                ema = self.var_ema
-                ema_op = ema.apply(tf.trainable_variables())
+                ema_op = self.var_ema.apply(tf.trainable_variables())
                 with tf.control_dependencies([ema_op]):
                     self.mean_loss = tf.identity(self.mean_loss)
+
+                self.shadow_vars = []
+                self.global_vars = []
+                for var in tf.global_variables():
+                    v = self.var_ema.average(var)
+                    if v:
+                        self.shadow_vars.append(v)
+                        self.global_vars.append(var)
+                self.assign_vars = []
+                for g,v in zip(self.global_vars, self.shadow_vars):
+                    self.assign_vars.append(tf.assign(g,v))
 
             # learning rate warmup scheme
             self.warmup_scheme = tf.minimum(Params.LearningRate, 0.001 / tf.log(999.) * tf.log(tf.cast(self.global_step, tf.float32) + 1))
@@ -207,9 +217,14 @@ def test():
     model = Model(is_training = False); print("Built model")
     dict_ = pickle.load(open(Params.data_dir + "dictionary.pkl","r"))
     with model.graph.as_default():
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
         sv = tf.train.Supervisor()
-        with sv.managed_session() as sess:
+        with sv.managed_session(config = config) as sess:
             sv.saver.restore(sess, tf.train.latest_checkpoint(Params.logdir))
+            if Params.decay is not None:
+                shadow_vars = sess.run(model.shadow_vars)
+                sess.run(model.assign_vars, {a:b for a,b in zip(model.shadow_vars, shadow_vars)})
             EM, F1 = 0.0, 0.0
             for step in tqdm(range(model.num_batch), total = model.num_batch, ncols=70, leave=False, unit='b'):
                 index, ground_truth, passage = sess.run([model.output_index, model.indices, model.passage_w])
@@ -230,8 +245,8 @@ def main():
         init = True
         glove = np.memmap(Params.data_dir + "glove.np", dtype = np.float32, mode = "r")
         glove = np.reshape(glove,(Params.vocab_size,Params.emb_size))
-        glove = (glove - np.expand_dims(glove.mean(-1), -1)) / np.expand_dims(glove.std(-1),-1)
-        glove[0] = np.zeros(Params.emb_size, dtype = np.float32)
+        # glove = (glove - np.expand_dims(glove.mean(-1), -1)) / np.expand_dims(glove.std(-1),-1)
+        # glove[0] = np.zeros(Params.emb_size, dtype = np.float32)
     with model.graph.as_default():
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -254,7 +269,6 @@ def main():
                         sample = np.random.choice(dev_ind, Params.batch_size)
                         feed_dict = {data: devdata[i][sample] for i,data in enumerate(model.data)}
                         index, dev_loss = sess.run([model.output_index, model.mean_loss], feed_dict = feed_dict)
-                        #index = np.argmax(logits, axis = 2)
                         F1, EM = 0.0, 0.0
                         for batch in range(Params.batch_size):
                             f1, em = f1_and_EM(index[batch], devdata[6][sample][batch], devdata[0][sample][batch], dict_)

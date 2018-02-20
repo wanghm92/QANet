@@ -40,6 +40,11 @@ initializer_relu = tf.contrib.layers.variance_scaling_initializer(factor=2.0,
 regularizer = tf.contrib.layers.l2_regularizer(
                scale = Params.l2_norm if Params.l2_norm is not None else 0.0)
 
+def glu(x):
+    """Gated Linear Units from https://arxiv.org/pdf/1612.08083.pdf"""
+    x, x_h = tf.split(x, 2, axis = -1)
+    return tf.sigmoid(x) * x_h
+
 def noam_norm(x, epsilon=1.0, scope=None, reuse=None):
     """One version of layer normalization."""
     with tf.name_scope(scope, default_name="noam_norm", values=[x]):
@@ -184,7 +189,6 @@ def multihead_attention(queries, units, num_heads,
         res = tf.concat([x, queries], axis = -1)
         gate = tf.sigmoid(conv(res, units, name = "combine", reuse = reuse))
         return x * gate
-        # return conv(x, units, name = "combine", reuse = reuse)
 
 def conv(inputs, output_size, bias = None, activation = None, name = "conv", reuse = None):
     with tf.variable_scope(name, reuse = reuse):
@@ -288,8 +292,8 @@ def dot_product_attention(q,
     A Tensor.
     """
     with tf.variable_scope(scope, default_name="dot_product_attention", reuse = reuse):
-        q = tf.nn.relu(q)
-        k = tf.nn.relu(k)
+        # q = tf.nn.relu(q)
+        # k = tf.nn.relu(k)
         # [batch, num_heads, query_length, memory_length]
         logits = tf.matmul(q, k, transpose_b=True)
         if bias:

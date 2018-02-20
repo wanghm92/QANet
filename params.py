@@ -1,9 +1,10 @@
 class Params():
+    '''A set of hyper-parameters used for training and testing.
+    Automatically saved at the logdir when training starts.'''
 
     # data
     data_size = -1 # -1 to use all data
     num_epochs = 30
-    train_prop = 0.9 # Not implemented atm
     data_dir = "./data/"
     train_dir = data_dir + "trainset/"
     dev_dir = data_dir + "devset/"
@@ -38,7 +39,7 @@ class Params():
                 'adagrad':{}}
 
     # Architecture
-    num_heads = 8 # Number of heads in multihead or branched attention
+    num_heads = 1 # Number of heads in multihead or branched attention
     #NOTE branched attention is disabled
     attention = "multihead" # Which attention to use for multihead, options: ["multihead", "branched"]
     max_p_len = 300 # Maximum number of words in each passage context
@@ -50,3 +51,11 @@ class Params():
     char_emb_size = 200 # Embeddings size for words
     bias = True # Use bias term in attention
     num_units = 128 # Number of units throughout the networks
+
+    def dump_config(self, dict_):
+        line = ["Hyper Parameters for train: " + self.logdir]
+        for key in dict_.keys():
+            if key not in ["__doc__","__module__"]:
+                line.append("{}: {}".format(key, dict_[key]))
+        with open(self.logdir + "/config.txt", "w") as f:
+            f.write("\n".join(line))

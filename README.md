@@ -1,7 +1,7 @@
 # FAST AND ACCURATE READING COMPREHENSION WITHOUT RECURRENT NETWORKS
 A Tensorflow implementation of Google's [Fast Reading Comprehension](https://openreview.net/pdf?id=B14TlG-RW) from [ICLR2018](https://openreview.net/forum?id=B14TlG-RW).
 Without RNNs the model computes relatively quickly compared to [R-net](https://github.com/minsangkim142/R-net)(about 5 times faster in naive implementation).
-After 12 epochs of training our model reaches dev EM/F1 = 56 / 69.
+After 12 epochs of training our model reaches dev EM/F1 = 57 / 72.
 
 ![Alt text](/../master/screenshots/figure.png?raw=true "Network Outline")
 

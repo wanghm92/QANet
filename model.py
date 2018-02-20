@@ -256,6 +256,8 @@ def main():
                         init_op = model.init_op)
         with sv.managed_session(config = config) as sess:
             if init: sess.run(model.emb_assign, {model.word_embeddings_placeholder:glove})
+            pr = Params()
+            pr.dump_config(Params.__dict__)
             for epoch in range(1, Params.num_epochs+1):
                 if sv.should_stop(): break
                 train_loss = []

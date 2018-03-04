@@ -92,12 +92,16 @@ def layer_dropout(inputs, residual, dropout):
     pred = tf.random_uniform([]) < dropout
     return tf.cond(pred, lambda: residual, lambda: inputs + residual)
 
+def dense_connection(inputs, scope = "densenet", reuse = None):
+    inputs = tf.concat(inputs, axis = -1)
+    return conv(inputs, Params.num_units, name = scope, reuse = reuse)
+
 def encoding(word, char, word_embeddings, char_embeddings, scope = "embedding"):
     word_encoding = tf.nn.embedding_lookup(word_embeddings, word)
     char_encoding = tf.nn.embedding_lookup(char_embeddings, char)
     return word_encoding, char_encoding
 
-def residual_block(inputs, num_blocks, num_conv_layers, kernel_size,
+def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, mask = None,
                    num_filters = Params.num_units, input_projection = False,
                    seq_len = None, scope = "res_block", is_training = True,
                    reuse = None, bias = Params.bias, dropout = 0.0):
@@ -112,7 +116,7 @@ def residual_block(inputs, num_blocks, num_conv_layers, kernel_size,
             outputs, sublayer = conv_block(outputs, num_conv_layers, kernel_size, num_filters,
                 seq_len = seq_len, scope = "encoder_block_%d"%i,reuse = reuse, bias = bias,
                 dropout = dropout, sublayers = (sublayer, total_sublayers))
-            outputs, sublayer = self_attention_block(outputs, num_filters, seq_len,
+            outputs, sublayer = self_attention_block(outputs, num_filters, seq_len, mask = mask,
                 scope = "self_attention_layers%d"%i, reuse = reuse, is_training = is_training,
                 bias = bias, dropout = dropout, sublayers = (sublayer, total_sublayers))
         return outputs
@@ -127,14 +131,15 @@ def conv_block(inputs, num_conv_layers, kernel_size, num_filters,
             residual = outputs
             outputs = norm_fn(outputs, scope = "layer_norm_%d"%i, reuse = reuse)
             outputs = depthwise_separable_convolution(outputs,
-                kernel_size = kernel_size, num_filters = num_filters,
+                kernel_size = (kernel_size, 1), num_filters = num_filters,
                 scope = "depthwise_conv_layers_%d"%i, is_training = is_training, reuse = reuse)
-            outputs = tf.nn.dropout(outputs, 1 - dropout)
+            if (i+1) % 2 == 0:
+                outputs = tf.nn.dropout(outputs, 1 - dropout)
             outputs = layer_dropout(outputs, residual, dropout * float(l) / L)
             l += 1
         return outputs, l
 
-def self_attention_block(inputs, num_filters, seq_len,
+def self_attention_block(inputs, num_filters, seq_len, mask = None,
                          scope = "self_attention_ffn", reuse = None, is_training = True,
                          bias = Params.bias, dropout = 0.0, sublayers = (1, 1)):
     with tf.variable_scope(scope, reuse = reuse):
@@ -143,7 +148,7 @@ def self_attention_block(inputs, num_filters, seq_len,
         outputs = norm_fn(inputs, scope = "layer_norm_1", reuse = reuse)
         outputs = multihead_attention(outputs, num_filters,
             num_heads = Params.num_heads, seq_len = seq_len, reuse = reuse,
-            is_training = is_training, bias = bias, dropout = dropout)
+            mask = mask, is_training = is_training, bias = bias, dropout = dropout)
         outputs = tf.nn.dropout(outputs, 1 - dropout)
         residual = layer_dropout(outputs, inputs, dropout * float(l) / L)
         l += 1
@@ -160,6 +165,7 @@ def multihead_attention(queries, units, num_heads,
                         seq_len = None,
                         scope = "Multi_Head_Attention",
                         reuse = None,
+                        mask = None,
                         is_training = True,
                         bias = Params.bias,
                         dropout = 0.0):
@@ -171,6 +177,7 @@ def multihead_attention(queries, units, num_heads,
         x = dot_product_attention(Q,K,V,
                                   bias = bias,
                                   seq_len = seq_len,
+                                  mask = mask,
                                   is_training = is_training,
                                   scope = "dot_product_attention",
                                   reuse = reuse, dropout = dropout)
@@ -183,12 +190,7 @@ def multihead_attention(queries, units, num_heads,
         #     x = conv(x, units, name = "output_projection", reuse = reuse) * kappa
         #     x = conv(x, units, bias = True, activation = tf.nn.relu, name ="Feed_forward_network", reuse = reuse) * alpha
         #     return tf.reduce_sum(x, axis = 1) + queries
-        x = combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
-
-        # Added self gating mechanism from R-net
-        res = tf.concat([x, queries], axis = -1)
-        gate = tf.sigmoid(conv(res, units, name = "combine", reuse = reuse))
-        return x * gate
+        return combine_last_two_dimensions(tf.transpose(x,[0,2,1,3]))
 
 def conv(inputs, output_size, bias = None, activation = None, name = "conv", reuse = None):
     with tf.variable_scope(name, reuse = reuse):
@@ -220,25 +222,27 @@ def conv(inputs, output_size, bias = None, activation = None, name = "conv", reu
         else:
             return outputs
 
-def mask_logits(inputs, sequence_length, mask_value = -1e30):
+def mask_logits(inputs, sequence_length, mask = None, mask_value = -1e30):
     shapes = inputs.shape.as_list()
-    mask = tf.reshape(
-                     tf.sequence_mask(sequence_length,
-                                      maxlen=shapes[-1],
-                                      dtype = tf.float32),
-                                      [-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]]
-                     )
-    mask_values = mask_value * (1.0 - mask)
-    return inputs + mask_values
+    if mask is None:
+        mask = tf.reshape(
+                         tf.sequence_mask(sequence_length,
+                                          maxlen=shapes[-1],
+                                          dtype = tf.float32),
+                                          [-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]]
+                         )
+    mask = tf.cast(mask, tf.float32)
+    return inputs + mask_value * (1 - mask)
 
 def depthwise_separable_convolution(inputs, kernel_size, num_filters,
                                     scope = "depthwise_separable_convolution",
                                     is_training = True, reuse = None):
     with tf.variable_scope(scope, reuse = reuse):
-        outputs = tf.expand_dims(inputs, axis = 2)
-        shapes = outputs.shape.as_list()
+        shapes = inputs.shape.as_list()
+        if len(shapes) == 3:
+            inputs = tf.expand_dims(inputs, axis = 2)
         depthwise_filter = tf.get_variable("depthwise_filter",
-                                        (kernel_size, 1, shapes[-1], 1),
+                                        (kernel_size[0], kernel_size[1], shapes[-1], 1),
                                         dtype = tf.float32,
                                         regularizer=regularizer,
                                         initializer = initializer_relu)
@@ -247,12 +251,14 @@ def depthwise_separable_convolution(inputs, kernel_size, num_filters,
                                         dtype = tf.float32,
                                         regularizer=regularizer,
                                         initializer = initializer_relu)
-        outputs = tf.nn.separable_conv2d(outputs,
+        outputs = tf.nn.separable_conv2d(inputs,
                                         depthwise_filter,
                                         pointwise_filter,
                                         strides = (1,1,1,1),
                                         padding = "SAME")
         outputs = tf.nn.relu(outputs)
+        if len(shapes) > 3:
+            return outputs
         return tf.squeeze(outputs)
 
 def split_last_dimension(x, n):
@@ -276,6 +282,7 @@ def dot_product_attention(q,
                           v,
                           bias,
                           seq_len = None,
+                          mask = None,
                           is_training = True,
                           scope=None,
                           reuse = None,
@@ -292,8 +299,8 @@ def dot_product_attention(q,
     A Tensor.
     """
     with tf.variable_scope(scope, default_name="dot_product_attention", reuse = reuse):
-        # q = tf.nn.relu(q)
-        # k = tf.nn.relu(k)
+        q = tf.nn.relu(q)
+        k = tf.nn.relu(k)
         # [batch, num_heads, query_length, memory_length]
         logits = tf.matmul(q, k, transpose_b=True)
         if bias:
@@ -303,7 +310,9 @@ def dot_product_attention(q,
                     initializer = initializer)
             logits += b
         if seq_len is not None:
-            logits = mask_logits(logits, seq_len)
+            shapes = logits.shape.as_list()
+            mask = tf.reshape(mask, [shapes[0],1,1,shapes[-1]])
+            logits = mask_logits(logits, seq_len, mask = mask)
         weights = tf.nn.softmax(logits, name="attention_weights")
         # dropping out the attention links for each of the heads
         # if is_training and Params.dropout is not None:
@@ -397,14 +406,10 @@ def trilinear(args,
             scope = "trilinear"):
     with tf.variable_scope(scope):
         flat_args = [flatten(arg, 1) for arg in args]
-        # if input_keep_prob < 1.0 and is_training:
         # flat_args = [tf.nn.dropout(arg, input_keep_prob) for arg in flat_args]
-        # flat_args = [tf.nn.dropout(arg, input_keep_prob, noise_shape = [1,output_size]) for arg in flat_args]
         flat_out = _linear(flat_args, output_size, bias, scope=scope)
         out = reconstruct(flat_out, args[0], 1)
-        if squeeze:
-            out = tf.squeeze(out, [len(args[0].get_shape().as_list())-1])
-    return out
+        return tf.squeeze(out, -1)
 
 def flatten(tensor, keep):
     fixed_shape = tensor.get_shape().as_list()

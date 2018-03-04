@@ -25,18 +25,21 @@ $ bash setup.sh
 $ python process.py --process True --reduce_glove True
 ```
 
-## Training / Testing / Debugging
+## Training / Testing / Debugging / Demo
 You can change the hyperparameters from params.py file to fit the model in your GPU. To train the model, run the following line.
 To test or debug your model after training, change mode = "train" from params.py file and run the model.
 ```shell
 $ python model.py
 ```
 
+**A working realtime demo is available at demo.py. To use web interface for live demo change use mode = "demo" and set batch_size to 1. (The code is taken from [R-net](https://github.com/minsangkim142/R-net))**
+
 ## TODO's
 - [x] Training and testing the model
 - [x] Add trilinear function to Context-to-Query attention
 - [x] Convergence testing
 - [x] Apply dropouts + stochastic depth dropout
+- [x] Realtime Demo
 - [ ] Query-to-context attention
 - [ ] Data augmentation by paraphrasing
 

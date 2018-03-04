@@ -30,14 +30,13 @@ parser.add_argument('-p','--process', default = False, type = str2bool, help='Ge
 parser.add_argument('-r','--reduce_glove', default = False, type = str2bool, help='Reduce glove size.', required=False)
 args = parser.parse_args()
 
-if args.process:
-    import spacy
-    nlp = spacy.blank('en')
+import spacy
+nlp = spacy.blank('en')
 
-    def tokenize(text):
-        parsed = nlp(text)
-        tokens = [i.text.replace("''", '"').replace("``", '"') for i in parsed]
-        return tokens
+def tokenize(text):
+    parsed = nlp(text)
+    tokens = [i.text.replace("''", '"').replace("``", '"') for i in parsed]
+    return tokens
 
 class data_loader(object):
     def __init__(self,use_pretrained = None):
@@ -71,7 +70,7 @@ class data_loader(object):
             for j in i:
                 output.append(str(self.ids2char[j]))
             output.append(" ")
-        return "".join(output)
+        return "".join(output).strip()
 
     def process_glove(self, wordvecs, dict_, count, emb_size):
         print("Reading GloVe from: {}".format(wordvecs))
@@ -124,6 +123,8 @@ class data_loader(object):
                     answers = find_answer_index(context, ans)
                     for answer in answers:
                         start_i, finish_i = answer
+                        if finish_i >= len(context):
+                            finish_i -= 1
                         if start_i == -1:
                             self.invalid_q += 1
                             continue
@@ -159,11 +160,11 @@ class data_loader(object):
 
         words = []
         chars = []
+        count = 0
         for i,word in enumerate(line):
-            word = word.replace(" ","").strip()
             word = normalize_text(''.join(word).decode("utf-8"))
             if word:
-                if i > 0:
+                if count > 0:
                     chars.append("_SPC")
                 for char in word:
                     char = self.c_dict.get(char,self.c_dict["_UNK"])
@@ -172,12 +173,43 @@ class data_loader(object):
                     if char == 0:
                         self.c_unknown_count += 1
 
+                count += 1
                 word = self.w_dict.get(word.strip().strip(" "),self.w_dict["_UNK"])
                 words.append(str(word))
                 self.w_occurence += 1
                 if word == 0:
                     self.w_unknown_count += 1
+            else:
+                print("skipped word:{}".format(word))
         return (words, chars)
+
+    def realtime_process(self, data):
+        p,q = data
+        p_max_word = Params.max_p_len
+        p_max_char = Params.max_char_len
+        q_max_word = Params.max_q_len
+        q_max_char = Params.max_char_len
+
+        pw,pc = self.add_to_dict(tokenize(p))
+        qw,qc = self.add_to_dict(tokenize(q))
+        p_word_len = [len(pw)]
+        q_word_len = [len(qw)]
+        pc, pcl = get_char_line(" ".join(pc))
+        qc, qcl = get_char_line(" ".join(qc))
+
+        p_word_ids = pad_data([pw],p_max_word)
+        q_word_ids = pad_data([qw],q_max_word)
+
+        p_word_len = np.reshape(np.asarray(p_word_len,np.int32),(-1,1))
+        q_word_len = np.reshape(np.asarray(q_word_len,np.int32),(-1,1))
+        p_char_ids = pad_char_data([pc],p_max_char,p_max_word)
+        q_char_ids = pad_char_data([qc],q_max_char,q_max_word)
+
+        shapes=[(p_max_word,),(q_max_word,),
+                (p_max_word,p_max_char,),(q_max_word,q_max_char,)]
+
+        return ([p_word_ids, q_word_ids,
+                p_char_ids, q_char_ids], shapes)
 
 def load_glove(dir_, name, vocab_size):
     glove = np.zeros((vocab_size,Params.emb_size),dtype = np.float32)
@@ -208,6 +240,16 @@ def load_glove(dir_, name, vocab_size):
     glove_map = np.memmap(Params.data_dir + name + ".np", dtype='float32', mode='write', shape=(vocab_size,Params.emb_size))
     glove_map[:] = glove
     del glove_map
+
+def get_char_line(line):
+    line = line.split("_SPC")
+    c_len = []
+    chars = []
+    for word in line:
+        c = [int(w) for w in word.split()]
+        c_len.append(len(c))
+        chars.append(c)
+    return chars, c_len
 
 def reduce_glove(dir_, dict_):
     glove_f = []
@@ -279,8 +321,9 @@ def pad_char_len(data, max_word, max_char):
             if j >= max_word:
                 break
             padded_data[i, j] = word if word <= max_char else max_char
-            if word < max_char:
-                print("illegal")
+            # if word < max_char:
+            #     print(word, max_char)
+            #     print("illegal")
     return padded_data
 
 def pad_char_data(data, max_char, max_words):
@@ -318,8 +361,10 @@ def load_word(dir):
             line = [int(w) for w in line.split()]
             if line:
                 data.append(line)
+                w_len.append(len(line))
+            else:
+                print(count)
             count += 1
-            w_len.append(len(line))
             line = f.readline()
     return data, w_len
 
@@ -336,9 +381,11 @@ def load_char(dir):
             line = line.split("_SPC")
             for word in line:
                 c = [int(w) for w in word.split()]
-                c_len.append(len(c))
                 if c:
+                    c_len.append(len(c))
                     chars.append(c)
+                else:
+                    print(count, dir)
             data.append(chars)
             line = f.readline()
             count += 1
@@ -368,10 +415,12 @@ def main():
             loader.process_json(Params.data_dir + "train-v1.1.json", out_dir = Params.train_dir)
             print("Tokenizing dev data.")
             loader.process_json(Params.data_dir + "dev-v1.1.json", out_dir = Params.dev_dir)
+            loader.vocab_size = max(loader.ids2word.keys()) + 1
             pickle.dump(loader, dictionary, pickle.HIGHEST_PROTOCOL)
             print("Tokenizing complete")
     if os.path.isfile(Params.data_dir + "glove.np"): exit()
-    load_glove(Params.glove_dir,"glove",vocab_size = Params.vocab_size)
+    loader = pickle.load(open(Params.data_dir + "dictionary.pkl","r"))
+    load_glove(Params.glove_dir,"glove",vocab_size = max(loader.ids2word.keys()) + 1)
     print("Processing complete")
     print("Unknown word ratio: {} / {}".format(loader.w_unknown_count,loader.w_occurence))
     print("Unknown character ratio: {} / {}".format(loader.c_unknown_count,loader.c_occurence))

@@ -43,7 +43,6 @@ class Model(object):
 
         self.forward()
         total_params()
-        exit()
 
         if trainable:
             self.lr = tf.minimum(config.learning_rate, 0.001 / tf.log(999.) * tf.log(tf.cast(self.global_step, tf.float32) + 1))

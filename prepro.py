@@ -193,7 +193,7 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
                                   "id": tf.train.Feature(int64_list=tf.train.Int64List(value=[example["id"]]))
                                   }))
         writer.write(record.SerializeToString())
-    print("Build {} / {} instances of features in total".format(total, total_))
+    print("Built {} / {} instances of features in total".format(total, total_))
     meta["total"] = total
     writer.close()
     return meta

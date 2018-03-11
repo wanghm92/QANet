@@ -83,8 +83,8 @@ class Model(object):
             c_emb = tf.concat([c_emb, ch_emb], axis=2)
             q_emb = tf.concat([q_emb, qh_emb], axis=2)
 
-            c_emb = highway(c_emb, size = d, scope = "highway", reuse = None)
-            q_emb = highway(q_emb, size = d, scope = "highway", reuse = True)
+            c_emb = highway(c_emb, scope = "highway", reuse = None)
+            q_emb = highway(q_emb, scope = "highway", reuse = True)
 
         with tf.variable_scope("Embedding_Encoder_Layer"):
             c = residual_block(c_emb,
@@ -93,7 +93,7 @@ class Model(object):
                 kernel_size = 7,
                 mask = self.c_mask,
                 num_filters = d,
-                input_projection = False,
+                input_projection = True,
                 num_heads = nh,
                 seq_len = self.c_len,
                 scope = "Encoder_Residual_Block",
@@ -105,7 +105,7 @@ class Model(object):
                 kernel_size = 7,
                 mask = self.q_mask,
                 num_filters = d,
-                input_projection = False,
+                input_projection = True,
                 num_heads = nh,
                 seq_len = self.q_len,
                 scope = "Encoder_Residual_Block",

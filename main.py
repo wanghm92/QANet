@@ -11,7 +11,6 @@ https://github.com/HKUST-KnowComp/R-Net
 
 
 from model import Model
-from params import Params
 from util import get_record_parser, convert_tokens, evaluate, get_batch_dataset, get_dataset
 
 
@@ -58,7 +57,7 @@ def train(config):
         for _ in tqdm(range(1, config.num_steps + 1)):
             global_step = sess.run(model.global_step) + 1
             loss, train_op = sess.run([model.loss, model.train_op], feed_dict={
-                                      handle: train_handle, model.dropout: Params.dropout if Params.dropout is not None else 0.0})
+                                      handle: train_handle, model.dropout: config.dropout})
             if global_step % config.period == 0:
                 loss_sum = tf.Summary(value=[tf.Summary.Value(
                     tag="model/loss", simple_value=loss), ])

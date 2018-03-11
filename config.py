@@ -93,7 +93,7 @@ flags.DEFINE_float("grad_clip", 5.0, "Global Norm gradient clipping rate")
 flags.DEFINE_float("learning_rate", 0.001, "Learning rate")
 flags.DEFINE_float("decay", 0.9999, "Exponential moving average decay")
 flags.DEFINE_float("l2_norm", 3e-7, "L2 norm scale")
-flags.DEFINE_integer("hidden", 128, "Hidden size")
+flags.DEFINE_integer("hidden", 96, "Hidden size")
 flags.DEFINE_integer("num_heads", 1, "Number of heads in self attention")
 
 # Extensions (Uncomment corresponding code in download.sh to download the required data)

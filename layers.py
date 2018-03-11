@@ -17,8 +17,6 @@ from tensorflow.python.ops import clip_ops
 
 from functools import reduce
 from operator import mul
-from params import Params
-# from common_layers import *
 
 '''
 Some functions are borrowed from Tensor2Tensor Library:
@@ -37,8 +35,7 @@ initializer_relu = lambda: tf.contrib.layers.variance_scaling_initializer(factor
                                                              uniform=False,
                                                              seed=None,
                                                              dtype=tf.float32)
-regularizer = tf.contrib.layers.l2_regularizer(
-               scale = Params.l2_norm if Params.l2_norm is not None else 0.0)
+regularizer = tf.contrib.layers.l2_regularizer(scale = 3e-7)
 
 def glu(x):
     """Gated Linear Units from https://arxiv.org/pdf/1612.08083.pdf"""

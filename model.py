@@ -2,15 +2,21 @@ import tensorflow as tf
 from layers import regularizer, residual_block, highway, conv, mask_logits, trilinear, total_params
 
 class Model(object):
-    def __init__(self, config, batch, word_mat=None, char_mat=None, trainable=True, opt=True):
+    def __init__(self, config, batch, word_mat=None, char_mat=None, trainable=True, opt=True, demo = False):
         self.config = config
         self.global_step = tf.get_variable('global_step', shape=[], dtype=tf.int32,
                                            initializer=tf.constant_initializer(0), trainable=False)
-        self.c, self.q, self.ch, self.qh, self.y1, self.y2, self.qa_id = batch.get_next()
         self.dropout = tf.placeholder_with_default(0.0, (), name="dropout")
+        if demo:
+            self.c = tf.placeholder(tf.int32, [None, config.test_para_limit],"context")
+            self.q = tf.placeholder(tf.int32, [None, config.test_ques_limit],"question")
+            self.ch = tf.placeholder(tf.int32, [None, config.test_para_limit, config.char_limit],"context_char")
+            self.qh = tf.placeholder(tf.int32, [None, config.test_ques_limit, config.char_limit],"question_char")
+            self.y1 = tf.placeholder(tf.int32, [None, config.test_para_limit],"answer_index1")
+            self.y2 = tf.placeholder(tf.int32, [None, config.test_para_limit],"answer_index2")
+        else:
+            self.c, self.q, self.ch, self.qh, self.y1, self.y2, self.qa_id = batch.get_next()
 
-        self.is_train = tf.get_variable(
-            "is_train", shape=[], dtype=tf.bool, trainable=False)
         self.word_mat = tf.get_variable("word_mat", initializer=tf.constant(
             word_mat, dtype=tf.float32), trainable=False)
         self.char_mat = tf.get_variable(
@@ -161,27 +167,27 @@ class Model(object):
                 logits=logits2, labels=self.y2)
             self.loss = tf.reduce_mean(losses + losses2)
 
-        self.var_ema = tf.train.ExponentialMovingAverage(config.decay)
-        self.shadow_vars = []
-        self.global_vars = []
-        for var in tf.global_variables():
-            v = self.var_ema.average(var)
-            if v:
-                self.shadow_vars.append(v)
-                self.global_vars.append(var)
-        self.assign_vars = []
-        for g,v in zip(self.global_vars, self.shadow_vars):
-            self.assign_vars.append(tf.assign(g,v))
-
         if config.l2_norm is not None:
             variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
             l2_loss = tf.contrib.layers.apply_regularization(regularizer, variables)
             self.loss += l2_loss
 
         if config.decay is not None:
+            self.var_ema = tf.train.ExponentialMovingAverage(config.decay)
             ema_op = self.var_ema.apply(tf.trainable_variables())
             with tf.control_dependencies([ema_op]):
                 self.loss = tf.identity(self.loss)
+
+                self.shadow_vars = []
+                self.global_vars = []
+                for var in tf.global_variables():
+                    v = self.var_ema.average(var)
+                    if v:
+                        self.shadow_vars.append(v)
+                        self.global_vars.append(var)
+                self.assign_vars = []
+                for g,v in zip(self.global_vars, self.shadow_vars):
+                    self.assign_vars.append(tf.assign(g,v))
 
     def get_loss(self):
         return self.loss

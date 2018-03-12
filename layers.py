@@ -19,7 +19,7 @@ from functools import reduce
 from operator import mul
 
 '''
-Some functions are borrowed from Tensor2Tensor Library:
+Some functions are taken directly from Tensor2Tensor Library:
 https://github.com/tensorflow/tensor2tensor/
 and BiDAF repository:
 https://github.com/allenai/bi-att-flow
@@ -27,13 +27,11 @@ https://github.com/allenai/bi-att-flow
 
 initializer = lambda: tf.contrib.layers.variance_scaling_initializer(factor=1.0,
                                                              mode='FAN_AVG',
-                                                             uniform=False,
-                                                             seed=None,
+                                                             uniform=True,
                                                              dtype=tf.float32)
 initializer_relu = lambda: tf.contrib.layers.variance_scaling_initializer(factor=2.0,
                                                              mode='FAN_IN',
                                                              uniform=False,
-                                                             seed=None,
                                                              dtype=tf.float32)
 regularizer = tf.contrib.layers.l2_regularizer(scale = 3e-7)
 
@@ -123,7 +121,7 @@ def conv_block(inputs, num_conv_layers, kernel_size, num_filters,
         for i in range(num_conv_layers):
             residual = outputs
             if (i) % 2 == 0:
-                outputs = tf.nn.dropout(outputs, 1 - dropout)
+                outputs = tf.nn.dropout(outputs, 1.0 - dropout)
             outputs = norm_fn(outputs, scope = "layer_norm_%d"%i, reuse = reuse)
             outputs = depthwise_separable_convolution(outputs,
                 kernel_size = (kernel_size, 1), num_filters = num_filters,
@@ -138,7 +136,7 @@ def self_attention_block(inputs, num_filters, seq_len, mask = None, num_heads = 
     with tf.variable_scope(scope, reuse = reuse):
         l, L = sublayers
         # Self attention
-        outputs = tf.nn.dropout(inputs, 1 - dropout)
+        outputs = tf.nn.dropout(inputs, 1.0 - dropout)
         outputs = norm_fn(outputs, scope = "layer_norm_1", reuse = reuse)
         outputs = multihead_attention(outputs, num_filters,
             num_heads = num_heads, seq_len = seq_len, reuse = reuse,
@@ -146,7 +144,7 @@ def self_attention_block(inputs, num_filters, seq_len, mask = None, num_heads = 
         residual = layer_dropout(outputs, inputs, dropout * float(l) / L)
         l += 1
         # Feed-forward
-        outputs = tf.nn.dropout(residual, 1 - dropout)
+        outputs = tf.nn.dropout(residual, 1.0 - dropout)
         outputs = norm_fn(outputs, scope = "layer_norm_2", reuse = reuse)
         outputs = conv(outputs, num_filters, True, tf.nn.relu, name = "FFN_1", reuse = reuse)
         outputs = conv(outputs, num_filters, True, None, name = "FFN_2", reuse = reuse)

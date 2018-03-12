@@ -7,7 +7,7 @@ https://github.com/HKUST-KnowComp/R-Net
 '''
 
 from prepro import prepro
-from main import train, test
+from main import train, test, demo
 
 flags = tf.flags
 
@@ -72,6 +72,7 @@ flags.DEFINE_integer("char_dim", 200, "Embedding dimension for char")
 
 flags.DEFINE_integer("para_limit", 400, "Limit length for paragraph")
 flags.DEFINE_integer("ques_limit", 50, "Limit length for question")
+flags.DEFINE_integer("ans_limit", 30, "Limit length for answers")
 flags.DEFINE_integer("test_para_limit", 1000, "Limit length for paragraph in test file")
 flags.DEFINE_integer("test_ques_limit", 100, "Limit length for question in test file")
 flags.DEFINE_integer("char_limit", 16, "Limit length for character")
@@ -81,7 +82,7 @@ flags.DEFINE_integer("char_count_limit", -1, "Min count for char")
 flags.DEFINE_integer("capacity", 15000, "Batch size of dataset shuffle")
 flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
 flags.DEFINE_boolean("is_bucket", False, "build bucket batch iterator or not")
-flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
+flags.DEFINE_integer("bucket_range", [40, 401, 40], "the range of bucket")
 
 flags.DEFINE_integer("batch_size", 32, "Batch size")
 flags.DEFINE_integer("num_steps", 60000, "Number of steps")
@@ -119,9 +120,9 @@ def main(_):
         config.period = 1
         train(config)
     elif config.mode == "test":
-        if config.use_cudnn:
-            print("Warning: Due to a known bug in Tensorlfow, the parameters of CudnnGRU may not be properly restored.")
         test(config)
+    # elif config.mode == "demo":
+    #     demo(config)
     else:
         print("Unknown mode")
         exit(0)

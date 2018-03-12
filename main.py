@@ -52,7 +52,6 @@ def train(config):
         saver = tf.train.Saver()
         train_handle = sess.run(train_iterator.string_handle())
         dev_handle = sess.run(dev_iterator.string_handle())
-        sess.run(tf.assign(model.is_train, tf.constant(True, dtype=tf.bool)))
 
         for _ in tqdm(range(1, config.num_steps + 1)):
             global_step = sess.run(model.global_step) + 1
@@ -63,8 +62,6 @@ def train(config):
                     tag="model/loss", simple_value=loss), ])
                 writer.add_summary(loss_sum, global_step)
             if global_step % config.checkpoint == 0:
-                sess.run(tf.assign(model.is_train,
-                                   tf.constant(False, dtype=tf.bool)))
                 _, summ = evaluate_batch(
                     model, config.val_num_batches, train_eval_file, sess, "train", handle, train_handle)
                 for s in summ:
@@ -72,8 +69,6 @@ def train(config):
 
                 metrics, summ = evaluate_batch(
                     model, dev_total // config.batch_size + 1, dev_eval_file, sess, "dev", handle, dev_handle)
-                sess.run(tf.assign(model.is_train,
-                                   tf.constant(True, dtype=tf.bool)))
 
                 dev_loss = metrics["loss"]
                 for s in summ:
@@ -106,6 +101,17 @@ def evaluate_batch(model, num_batches, eval_file, sess, data_type, handle, str_h
     return metrics, [loss_sum, f1_sum, em_sum]
 
 
+def demo(config):
+    with open(config.word_emb_file, "r") as fh:
+        word_mat = np.array(json.load(fh), dtype=np.float32)
+    with open(config.char_emb_file, "r") as fh:
+        char_mat = np.array(json.load(fh), dtype=np.float32)
+    with open(config.test_meta, "r") as fh:
+        meta = json.load(fh)
+
+    model = Model(config, None, word_mat, char_mat, trainable=False, demo = True)
+
+
 def test(config):
     with open(config.word_emb_file, "r") as fh:
         word_mat = np.array(json.load(fh), dtype=np.float32)
@@ -131,9 +137,8 @@ def test(config):
         sess.run(tf.global_variables_initializer())
         saver = tf.train.Saver()
         saver.restore(sess, tf.train.latest_checkpoint(config.save_dir))
-        sess.run(tf.assign(model.is_train, tf.constant(False, dtype=tf.bool)))
-        shadow_vars = sess.run(model.shadow_vars)
-        sess.run(model.assign_vars, {a:b for a,b in zip(model.shadow_vars, shadow_vars)})
+        if config.decay < 1.0:
+            sess.run(model.assign_vars)
         losses = []
         answer_dict = {}
         remapped_dict = {}

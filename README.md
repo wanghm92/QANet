@@ -1,8 +1,8 @@
 # FAST AND ACCURATE READING COMPREHENSION WITHOUT RECURRENT NETWORKS
 A Tensorflow implementation of Google's [Fast Reading Comprehension](https://openreview.net/pdf?id=B14TlG-RW) from [ICLR2018](https://openreview.net/forum?id=B14TlG-RW).
-Training and preprocessing pipeline has been adopted from [R-Net by HKUST-KnowComp](https://github.com/HKUST-KnowComp/R-Net). Demo mode needs to be reimplemented. If you are here for the demo please use [dev](https://github.com/minsangkim142/Reading-Comprehension-without-RNNs/tree/dev) branch. The model reaches F1 score 75.0 in 30k steps which is similar to the results in the original paper (F1 score of 77.0 in 35k steps).
+Training and preprocessing pipeline has been adopted from [R-Net by HKUST-KnowComp](https://github.com/HKUST-KnowComp/R-Net). Demo mode needs to be reimplemented. If you are here for the demo please use [dev](https://github.com/minsangkim142/Reading-Comprehension-without-RNNs/tree/dev) branch. The model reaches F1 score 76.7 in 35k steps which is similar to the results in the original paper (F1 score of 77.0 in 35k steps). However, the performance doesn't improve much after that.
 
-Due to memory issue, a single head dot-product attention is used as opposed to 8 heads multi-head attention as mentioned in the original paper. Also hidden size is reduced to 96 from 128 due to memory problems in GTX1080. (8GB GPU memory is insufficient. If you have a 12GB memory GPU please share your results with us.)
+Due to memory issue, a single head dot-product attention is used as opposed to 8 heads multi-head attention as mentioned in the original paper. Also hidden size is reduced to 96 from 128 due to using GTX1080 compared to p100 in the paper. (8GB GPU memory is insufficient. If you have a 12GB memory GPU please share your results with us.)
 
 ![Alt text](/../master/screenshots/figure.png?raw=true "Network Outline")
 

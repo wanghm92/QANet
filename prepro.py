@@ -75,6 +75,8 @@ def process_file(filename, data_type, word_counter, char_counter):
                         y1, y2 = answer_span[0], answer_span[-1]
                         y1s.append(y1)
                         y2s.append(y2)
+                        if len(y1s) > 1:
+                            print(y1s)
                     example = {"context_tokens": context_tokens, "context_chars": context_chars, "ques_tokens": ques_tokens,
                                "ques_chars": ques_chars, "y1s": y1s, "y2s": y2s, "id": total}
                     examples.append(example)
@@ -127,10 +129,13 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
 
     para_limit = config.test_para_limit if is_test else config.para_limit
     ques_limit = config.test_ques_limit if is_test else config.ques_limit
+    ans_limit = 100 if is_test else config.ans_limit
     char_limit = config.char_limit
 
     def filter_func(example, is_test=False):
-        return len(example["context_tokens"]) > para_limit or len(example["ques_tokens"]) > ques_limit
+        return len(example["context_tokens"]) > para_limit or \
+               len(example["ques_tokens"]) > ques_limit or \
+               (example["y2s"][0] - example["y1s"][0]) > ans_limit
 
     print("Processing {} examples...".format(data_type))
     writer = tf.python_io.TFRecordWriter(out_file)

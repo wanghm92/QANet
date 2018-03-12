@@ -51,22 +51,22 @@ class Demo(object):
 
     def demo_backend(self, model, run_event):
         global query, response
-        dict_ = pickle.load(open(Params.data_dir + "dictionary.pkl","r"))
 
-        with model.graph.as_default():
-            sv = tf.train.Supervisor()
-            with sv.managed_session() as sess:
-                sv.saver.restore(sess, tf.train.latest_checkpoint(Params.logdir))
-                while run_event.is_set():
-                    sleep(0.1)
-                    if query:
-                        data, shapes = dict_.realtime_process(query)
-                        fd = {m:d for i,(m,d) in enumerate(zip(model.data, data))}
-                        ids, confidence = sess.run([model.output_index, model.dp], feed_dict = fd)
-                        ids = ids[0]
-                        confidence = confidence[0]
-                        if ids[0] == ids[1]:
-                            ids[1] += 1
-                        passage_t = tokenize(query[0])
-                        response = " ".join(passage_t[ids[0]:ids[1]])
-                        query = []
+		sess_config = tf.ConfigProto(allow_soft_placement=True)
+		sess_config.gpu_options.allow_growth = True
+
+		with tf.Session(config=sess_config) as sess:
+            sv.saver.restore(sess, tf.train.latest_checkpoint(Params.logdir))
+			raise NotImplementedError
+            # while run_event.is_set():
+            #     sleep(0.1)
+                # if query:
+                #     fd = {m:d for i,(m,d) in enumerate(zip(model.data, data))}
+                #     ids, confidence = sess.run([model.output_index, model.dp], feed_dict = fd)
+                #     ids = ids[0]
+                #     confidence = confidence[0]
+                #     if ids[0] == ids[1]:
+                #         ids[1] += 1
+                #     passage_t = tokenize(query[0])
+                #     response = " ".join(passage_t[ids[0]:ids[1]])
+                #     query = []

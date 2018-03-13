@@ -41,45 +41,45 @@ def train(config):
 
     model = Model(config, iterator, word_mat, char_mat)
 
-    with model.graph.as_default():
+    # with model.graph.as_default():
 
-        sess_config = tf.ConfigProto(allow_soft_placement=True)
-        sess_config.gpu_options.allow_growth = True
+    sess_config = tf.ConfigProto(allow_soft_placement=True)
+    sess_config.gpu_options.allow_growth = True
 
-        loss_save = 100.0
-        patience = 0
+    loss_save = 100.0
+    patience = 0
 
-        with tf.Session(config=sess_config) as sess:
-            writer = tf.summary.FileWriter(config.log_dir)
-            sess.run(tf.global_variables_initializer())
-            saver = tf.train.Saver()
-            train_handle = sess.run(train_iterator.string_handle())
-            dev_handle = sess.run(dev_iterator.string_handle())
+    with tf.Session(config=sess_config) as sess:
+        writer = tf.summary.FileWriter(config.log_dir)
+        sess.run(tf.global_variables_initializer())
+        saver = tf.train.Saver()
+        train_handle = sess.run(train_iterator.string_handle())
+        dev_handle = sess.run(dev_iterator.string_handle())
 
-            for _ in tqdm(range(1, config.num_steps + 1)):
-                global_step = sess.run(model.global_step) + 1
-                loss, train_op = sess.run([model.loss, model.train_op], feed_dict={
-                                          handle: train_handle, model.dropout: config.dropout})
-                if global_step % config.period == 0:
-                    loss_sum = tf.Summary(value=[tf.Summary.Value(
-                        tag="model/loss", simple_value=loss), ])
-                    writer.add_summary(loss_sum, global_step)
-                if global_step % config.checkpoint == 0:
-                    _, summ = evaluate_batch(
-                        model, config.val_num_batches, train_eval_file, sess, "train", handle, train_handle)
-                    for s in summ:
-                        writer.add_summary(s, global_step)
+        for _ in tqdm(range(1, config.num_steps + 1)):
+            global_step = sess.run(model.global_step) + 1
+            loss, train_op = sess.run([model.loss, model.train_op], feed_dict={
+                                      handle: train_handle, model.dropout: config.dropout})
+            if global_step % config.period == 0:
+                loss_sum = tf.Summary(value=[tf.Summary.Value(
+                    tag="model/loss", simple_value=loss), ])
+                writer.add_summary(loss_sum, global_step)
+            if global_step % config.checkpoint == 0:
+                _, summ = evaluate_batch(
+                    model, config.val_num_batches, train_eval_file, sess, "train", handle, train_handle)
+                for s in summ:
+                    writer.add_summary(s, global_step)
 
-                    metrics, summ = evaluate_batch(
-                        model, dev_total // config.batch_size + 1, dev_eval_file, sess, "dev", handle, dev_handle)
+                metrics, summ = evaluate_batch(
+                    model, dev_total // config.batch_size + 1, dev_eval_file, sess, "dev", handle, dev_handle)
 
-                    dev_loss = metrics["loss"]
-                    for s in summ:
-                        writer.add_summary(s, global_step)
-                    writer.flush()
-                    filename = os.path.join(
-                        config.save_dir, "model_{}.ckpt".format(global_step))
-                    saver.save(sess, filename)
+                dev_loss = metrics["loss"]
+                for s in summ:
+                    writer.add_summary(s, global_step)
+                writer.flush()
+                filename = os.path.join(
+                    config.save_dir, "model_{}.ckpt".format(global_step))
+                saver.save(sess, filename)
 
 
 def evaluate_batch(model, num_batches, eval_file, sess, data_type, handle, str_handle):
@@ -134,31 +134,31 @@ def test(config):
 
     model = Model(config, test_batch, word_mat, char_mat, trainable=False)
 
-    with model.graph.as_default():
+    # with model.graph.as_default():
 
-        sess_config = tf.ConfigProto(allow_soft_placement=True)
-        sess_config.gpu_options.allow_growth = True
+    sess_config = tf.ConfigProto(allow_soft_placement=True)
+    sess_config.gpu_options.allow_growth = True
 
-        with tf.Session(config=sess_config) as sess:
-            sess.run(tf.global_variables_initializer())
-            saver = tf.train.Saver()
-            saver.restore(sess, tf.train.latest_checkpoint(config.save_dir))
-            if config.decay < 1.0:
-                sess.run(model.assign_vars)
-            losses = []
-            answer_dict = {}
-            remapped_dict = {}
-            for step in tqdm(range(total // config.batch_size + 1)):
-                qa_id, loss, yp1, yp2 = sess.run(
-                    [model.qa_id, model.loss, model.yp1, model.yp2])
-                answer_dict_, remapped_dict_ = convert_tokens(
-                    eval_file, qa_id.tolist(), yp1.tolist(), yp2.tolist())
-                answer_dict.update(answer_dict_)
-                remapped_dict.update(remapped_dict_)
-                losses.append(loss)
-            loss = np.mean(losses)
-            metrics = evaluate(eval_file, answer_dict)
-            with open(config.answer_file, "w") as fh:
-                json.dump(remapped_dict, fh)
-            print("Exact Match: {}, F1: {}".format(
-                metrics['exact_match'], metrics['f1']))
+    with tf.Session(config=sess_config) as sess:
+        sess.run(tf.global_variables_initializer())
+        saver = tf.train.Saver()
+        saver.restore(sess, tf.train.latest_checkpoint(config.save_dir))
+        if config.decay < 1.0:
+            sess.run(model.assign_vars)
+        losses = []
+        answer_dict = {}
+        remapped_dict = {}
+        for step in tqdm(range(total // config.batch_size + 1)):
+            qa_id, loss, yp1, yp2 = sess.run(
+                [model.qa_id, model.loss, model.yp1, model.yp2])
+            answer_dict_, remapped_dict_ = convert_tokens(
+                eval_file, qa_id.tolist(), yp1.tolist(), yp2.tolist())
+            answer_dict.update(answer_dict_)
+            remapped_dict.update(remapped_dict_)
+            losses.append(loss)
+        loss = np.mean(losses)
+        metrics = evaluate(eval_file, answer_dict)
+        with open(config.answer_file, "w") as fh:
+            json.dump(remapped_dict, fh)
+        print("Exact Match: {}, F1: {}".format(
+            metrics['exact_match'], metrics['f1']))

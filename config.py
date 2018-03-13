@@ -31,6 +31,8 @@ dev_eval = os.path.join(target_dir, "dev_eval.json")
 test_eval = os.path.join(target_dir, "test_eval.json")
 dev_meta = os.path.join(target_dir, "dev_meta.json")
 test_meta = os.path.join(target_dir, "test_meta.json")
+word_dictionary = os.path.join(target_dir, "word_dictionary.json")
+char_dictionary = os.path.join(target_dir, "char_dictionary.json")
 answer_file = os.path.join(answer_dir, "answer.json")
 
 if not os.path.exists(target_dir):
@@ -63,6 +65,8 @@ flags.DEFINE_string("test_eval_file", test_eval, "Out file for test eval")
 flags.DEFINE_string("dev_meta", dev_meta, "Out file for dev meta")
 flags.DEFINE_string("test_meta", test_meta, "Out file for test meta")
 flags.DEFINE_string("answer_file", answer_file, "Out file for answer")
+flags.DEFINE_string("word_dictionary", word_dictionary, "Word dictionary")
+flags.DEFINE_string("char_dictionary", char_dictionary, "Character dictionary")
 
 
 flags.DEFINE_integer("glove_char_size", 94, "Corpus size for Glove")
@@ -81,7 +85,7 @@ flags.DEFINE_integer("char_count_limit", -1, "Min count for char")
 
 flags.DEFINE_integer("capacity", 15000, "Batch size of dataset shuffle")
 flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
-flags.DEFINE_boolean("is_bucket", False, "build bucket batch iterator or not")
+flags.DEFINE_boolean("is_bucket", True, "build bucket batch iterator or not")
 flags.DEFINE_integer("bucket_range", [40, 401, 40], "the range of bucket")
 
 flags.DEFINE_integer("batch_size", 32, "Batch size")

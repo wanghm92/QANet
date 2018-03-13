@@ -4,10 +4,14 @@ from layers import regularizer, residual_block, highway, conv, mask_logits, tril
 class Model(object):
     def __init__(self, config, batch, word_mat=None, char_mat=None, trainable=True, opt=True, demo = False):
         self.config = config
+        self.demo = demo
+        # self.graph = tf.Graph()
+        # with self.graph.as_default():
+
         self.global_step = tf.get_variable('global_step', shape=[], dtype=tf.int32,
                                            initializer=tf.constant_initializer(0), trainable=False)
         self.dropout = tf.placeholder_with_default(0.0, (), name="dropout")
-        if demo:
+        if self.demo:
             self.c = tf.placeholder(tf.int32, [None, config.test_para_limit],"context")
             self.q = tf.placeholder(tf.int32, [None, config.test_ques_limit],"question")
             self.ch = tf.placeholder(tf.int32, [None, config.test_para_limit, config.char_limit],"context_char")
@@ -28,7 +32,7 @@ class Model(object):
         self.q_len = tf.reduce_sum(tf.cast(self.q_mask, tf.int32), axis=1)
 
         if opt:
-            N, CL = config.batch_size, config.char_limit
+            N, CL = config.batch_size if not self.demo else 1, config.char_limit
             self.c_maxlen = tf.reduce_max(self.c_len)
             self.q_maxlen = tf.reduce_max(self.q_len)
             self.c = tf.slice(self.c, [0, 0], [N, self.c_maxlen])
@@ -62,7 +66,7 @@ class Model(object):
 
     def forward(self):
         config = self.config
-        N, PL, QL, CL, d, dc, nh = config.batch_size, self.c_maxlen, self.q_maxlen, config.char_limit, config.hidden, config.char_dim, config.num_heads
+        N, PL, QL, CL, d, dc, nh = config.batch_size if not self.demo else 1, self.c_maxlen, self.q_maxlen, config.char_limit, config.hidden, config.char_dim, config.num_heads
 
         with tf.variable_scope("Input_Embedding_Layer"):
             ch_emb = tf.reshape(tf.nn.embedding_lookup(

@@ -17,10 +17,13 @@ dev_file = os.path.join(home, "data", "squad", "dev-v1.1.json")
 test_file = os.path.join(home, "data", "squad", "dev-v1.1.json")
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
+dir_name = "train"
+if not os.path.exists(os.path.join(os.getcwd(),dir_name)):
+    os.mkdir(os.path.join(os.getcwd(),dir_name))
 target_dir = "data"
-log_dir = "log/event"
-save_dir = "log/model"
-answer_dir = "log/answer"
+log_dir = os.path.join(dir_name, "event")
+save_dir = os.path.join(dir_name, "model")
+answer_dir = os.path.join(dir_name, "answer")
 train_record_file = os.path.join(target_dir, "train.tfrecords")
 dev_record_file = os.path.join(target_dir, "dev.tfrecords")
 test_record_file = os.path.join(target_dir, "test.tfrecords")
@@ -86,7 +89,7 @@ flags.DEFINE_integer("char_count_limit", -1, "Min count for char")
 flags.DEFINE_integer("capacity", 15000, "Batch size of dataset shuffle")
 flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
 flags.DEFINE_boolean("is_bucket", True, "build bucket batch iterator or not")
-flags.DEFINE_integer("bucket_range", [40, 401, 40], "the range of bucket")
+flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
 
 flags.DEFINE_integer("batch_size", 32, "Batch size")
 flags.DEFINE_integer("num_steps", 60000, "Number of steps")

@@ -51,6 +51,7 @@ The default directory for tensorboard log file is `log/event`
 
 ## Results
 Here is the collected results from this repository and the original paper.
+
 |      Model     | Training Steps | Size | Attention Heads | Data Size (aug) |  EM  |  F1  |
 |:--------------:|:--------------:|:----:|:---------------:|:---------------:|:----:|:----:|
 |       My Model |     35,000     |  96  |        1        |   87k (no aug)  | 67.2 | 76.7 |

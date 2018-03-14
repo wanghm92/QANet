@@ -1,5 +1,5 @@
 import tensorflow as tf
-from layers import regularizer, residual_block, highway, conv, mask_logits, trilinear, total_params
+from layers import initializer, regularizer, residual_block, highway, conv, mask_logits, trilinear, total_params
 
 class Model(object):
     def __init__(self, config, batch, word_mat=None, char_mat=None, trainable=True, opt=True, demo = False):
@@ -21,6 +21,8 @@ class Model(object):
         else:
             self.c, self.q, self.ch, self.qh, self.y1, self.y2, self.qa_id = batch.get_next()
 
+        # self.word_unk = tf.get_variable("word_unk", shape = [config.glove_dim], initializer=initializer())
+        # self.char_unk = tf.get_variable("char_unk", shape = [config.char_dim], initializer=initializer())
         self.word_mat = tf.get_variable("word_mat", initializer=tf.constant(
             word_mat, dtype=tf.float32), trainable=False)
         self.char_mat = tf.get_variable(
@@ -125,12 +127,18 @@ class Model(object):
             C = tf.tile(tf.expand_dims(c,2),[1,1,self.q_maxlen,1])
             Q = tf.tile(tf.expand_dims(q,1),[1,self.c_maxlen,1,1])
             S = trilinear([C, Q, C*Q], input_keep_prob = 1.0 - self.dropout)
-            mask = tf.expand_dims(self.q_mask, 1)
-            S_ = tf.nn.softmax(mask_logits(S, self.q_len, mask = mask))
+            mask_q = tf.expand_dims(self.q_mask, 1)
+            S_ = tf.nn.softmax(mask_logits(S, mask = mask_q))
+            mask_c = tf.expand_dims(self.c_mask, 2)
+            S_T = tf.transpose(tf.nn.softmax(mask_logits(S, mask = mask_c), axis = 1),(0,2,1))
             self.c2q = tf.matmul(S_, q)
+            self.q2c = tf.matmul(tf.matmul(S_, S_T), c)
+            attention_outputs = [c, self.c2q, c * self.c2q]
+            if config.q2c:
+                attention_outputs.append(c * self.q2c)
 
         with tf.variable_scope("Model_Encoder_Layer"):
-            inputs = tf.concat([c, self.c2q, c * self.c2q], axis = -1)
+            inputs = tf.concat(attention_outputs, axis = -1)
             self.enc = [conv(inputs, d, name = "input_projection")]
             for i in range(3):
                 if i % 2 == 0: # dropout every 2 blocks
@@ -153,8 +161,8 @@ class Model(object):
         with tf.variable_scope("Output_Layer"):
             start_logits = tf.squeeze(conv(tf.concat([self.enc[1], self.enc[2]],axis = -1),1, bias = False, name = "start_pointer"),-1)
             end_logits = tf.squeeze(conv(tf.concat([self.enc[1], self.enc[3]],axis = -1),1, bias = False, name = "end_pointer"), -1)
-            self.logits = [mask_logits(start_logits, self.c_len, mask = self.c_mask),
-                           mask_logits(end_logits, self.c_len, mask = self.c_mask)]
+            self.logits = [mask_logits(start_logits, mask = self.c_mask),
+                           mask_logits(end_logits, mask = self.c_mask)]
 
             logits1, logits2 = [l for l in self.logits]
 

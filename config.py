@@ -17,7 +17,7 @@ dev_file = os.path.join(home, "data", "squad", "dev-v1.1.json")
 test_file = os.path.join(home, "data", "squad", "dev-v1.1.json")
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
-dir_name = "train"
+dir_name = "log"
 if not os.path.exists(os.path.join(os.getcwd(),dir_name)):
     os.mkdir(os.path.join(os.getcwd(),dir_name))
 target_dir = "data"
@@ -88,7 +88,7 @@ flags.DEFINE_integer("char_count_limit", -1, "Min count for char")
 
 flags.DEFINE_integer("capacity", 15000, "Batch size of dataset shuffle")
 flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
-flags.DEFINE_boolean("is_bucket", True, "build bucket batch iterator or not")
+flags.DEFINE_boolean("is_bucket", False, "build bucket batch iterator or not")
 flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
 
 flags.DEFINE_integer("batch_size", 32, "Batch size")
@@ -103,6 +103,7 @@ flags.DEFINE_float("decay", 0.9999, "Exponential moving average decay")
 flags.DEFINE_float("l2_norm", 3e-7, "L2 norm scale")
 flags.DEFINE_integer("hidden", 96, "Hidden size")
 flags.DEFINE_integer("num_heads", 1, "Number of heads in self attention")
+flags.DEFINE_boolean("q2c", False, "Whether to use query to context attention or not")
 
 # Extensions (Uncomment corresponding code in download.sh to download the required data)
 glove_char_file = os.path.join(home, "data", "glove", "glove.840B.300d-char.txt")

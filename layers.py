@@ -212,16 +212,9 @@ def conv(inputs, output_size, bias = None, activation = None, kernel_size = 1, n
         else:
             return outputs
 
-def mask_logits(inputs, sequence_length, mask = None, mask_value = -1e30):
+def mask_logits(inputs, mask, mask_value = -1e30):
     shapes = inputs.shape.as_list()
-    if mask is None:
-        mask = tf.reshape(
-            tf.sequence_mask(sequence_length,
-                maxlen=shapes[-1],
-                dtype = tf.float32),
-                [-1,1,1,shapes[-1]] if len(shapes) == 4 else [-1,1,shapes[-1]]
-            )
-    else: mask = tf.cast(mask, tf.float32)
+    mask = tf.cast(mask, tf.float32)
     return inputs + mask_value * (1 - mask)
 
 def depthwise_separable_convolution(inputs, kernel_size, num_filters,
@@ -304,7 +297,7 @@ def dot_product_attention(q,
         if mask is not None:
             shapes = [x  if x != None else -1 for x in logits.shape.as_list()]
             mask = tf.reshape(mask, [shapes[0],1,1,shapes[-1]])
-            logits = mask_logits(logits, seq_len, mask = mask)
+            logits = mask_logits(logits, mask)
         weights = tf.nn.softmax(logits, name="attention_weights")
         # dropping out the attention links for each of the heads
         weights = tf.nn.dropout(weights, 1.0 - dropout)

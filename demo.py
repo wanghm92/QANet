@@ -58,10 +58,10 @@ class Demo(object):
         with open(config.char_dictionary, "r") as fh:
             char_dictionary = json.load(fh)
 
-        with model.graph.as_default():
+        sess_config = tf.ConfigProto(allow_soft_placement=True)
+        sess_config.gpu_options.allow_growth = True
 
-            sess_config = tf.ConfigProto(allow_soft_placement=True)
-            sess_config.gpu_options.allow_growth = True
+        with model.graph.as_default():
 
             with tf.Session(config=sess_config) as sess:
                 sess.run(tf.global_variables_initializer())

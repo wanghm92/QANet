@@ -69,7 +69,7 @@ def layer_norm(x, filters=None, epsilon=1e-6, scope=None, reuse=None):
 norm_fn = layer_norm#tf.contrib.layers.layer_norm #tf.contrib.layers.layer_norm or noam_norm
 
 def highway(x, size = None, activation = tf.nn.relu,
-            num_layers = 2, scope = "highway", reuse = None):
+            num_layers = 2, scope = "highway", dropout = 0.0, reuse = None):
     with tf.variable_scope(scope, reuse):
         if size is None:
             size = x.shape.as_list()[-1]
@@ -80,17 +80,13 @@ def highway(x, size = None, activation = tf.nn.relu,
                      name = "gate_%d"%i, reuse = reuse)
             H = conv(x, size, bias = True, activation = activation,
                      name = "activation_%d"%i, reuse = reuse)
+            H = tf.nn.dropout(H, 1.0 - dropout)
             x = H * T + x * (1.0 - T)
         return x
 
 def layer_dropout(inputs, residual, dropout):
     pred = tf.random_uniform([]) < dropout
-    return tf.cond(pred, lambda: residual, lambda: inputs + residual)
-
-def encoding(word, char, word_embeddings, char_embeddings, scope = "embedding"):
-    word_encoding = tf.nn.embedding_lookup(word_embeddings, word)
-    char_encoding = tf.nn.embedding_lookup(char_embeddings, char)
-    return word_encoding, char_encoding
+    return tf.cond(pred, lambda: residual, lambda: tf.nn.dropout(inputs, 1.0 - dropout) + residual)
 
 def residual_block(inputs, num_blocks, num_conv_layers, kernel_size, mask = None,
                    num_filters = 128, input_projection = False, num_heads = 8,

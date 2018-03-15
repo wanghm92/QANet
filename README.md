@@ -4,7 +4,7 @@ Training and preprocessing pipeline has been adopted from [R-Net by HKUST-KnowCo
 
 Due to memory issue, a single head dot-product attention is used as opposed to 8 heads multi-head attention as mentioned in the original paper. Also hidden size is reduced to 96 from 128 due to using GTX1080 compared to p100 in the paper. (8GB GPU memory is insufficient. If you have a 12GB memory GPU please share your results with us.)
 
-Our model reaches F1 score 77.0 in 35k steps as in the original paper (F1 score of 77.0 in 35k steps). The current best model reaches EM/F1 = 68.6/78.1 in 46k steps (about 5 hours in GTX1080). Detailed results are listed below.
+Our model reaches F1 score 77.0 in 35k steps as in the original paper (F1 score of 77.0 in 35k steps). The current best model reaches EM/F1 = 68.7/78.3 in 60k steps (about 5 hours with bucket / 8 hours without bucket in GTX1080). Detailed results are listed below.
 
 ![Alt text](/../master/screenshots/figure.png?raw=true "Network Outline")
 
@@ -44,7 +44,7 @@ The default directory for tensorboard log file is `log/event`
   * Encoder consists of positional encoding - depthwise separable convolution - self attention - feed forward structure with layer norm in between.
   * For regularization, dropout of 0.1 is used every 2 sub-layers and 2 blocks.
   * Stochastic depth dropout is used to drop the residual connection with respect to increasing depth of the network as this model heavily relies on residual connections.
-  * Unlike many other popular models on SQuAD, Context-to-Query attention is used but Query-to-Context attention is not implemented as it is reported not to improve much on the performance.
+  * Query-to-Context attention is used along with Context-to-Query attention, which seems to improve the performance more than what the paper reported. This may be due to the lack of diversity in self attention due to 1 head (as opposed to 8 heads) which may have repetitive information that query-to-context attention contains.
   * Learning rate increases from 0.0 to 0.001 in first 1000 steps in inverse exponential scale and fixed to 0.001 from 1000 steps.
   * During prediction, this model uses shadow variables maintained by exponential moving average of all global variables.
   * This model uses training / testing / preprocessing pipeline from [R-Net](https://github.com/HKUST-KnowComp/R-Net) for efficiency.
@@ -56,6 +56,7 @@ Here is the collected results from this repository and the original paper.
 |:--------------:|:--------------:|:----:|:---------------:|:---------------:|:----:|:----:|
 |       My Model |     35,000     |  96  |        1        |   87k (no aug)  | 68.1 | 77.0 |
 |       My model |     46,000     |  96  |        1        |   87k (no aug)  | 68.6 | 78.1 |
+|       My model |     60,000     |  96  |        1        |   87k (no aug)  | 68.7 | 78.3 |
 | Original Paper |     35,000     |  128 |        8        |   87k (no aug)  |  NA  | 77.0 |
 | Original Paper |     150,000    |  128 |        8        |   87k (no aug)  | 72.5 | 81.4 |
 | Original Paper |     340,000    |  128 |        8        |    240k (aug)   | 76.2 | 84.6 |
@@ -64,9 +65,10 @@ Here is the collected results from this repository and the original paper.
 - [x] Training and testing the model
 - [x] Add trilinear function to Context-to-Query attention
 - [x] Apply dropouts + stochastic depth dropout
-- [ ] Realtime Demo
-- [ ] Query-to-context attention
+- [x] Query-to-context attention
+- [x] Realtime Demo
 - [ ] Data augmentation by paraphrasing
+- [ ] Train with full hyperparameters (Augmented data, 8 heads, hidden units = 128)
 
 ## Tensorboard
 Run tensorboard for visualisation.

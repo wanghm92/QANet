@@ -1,6 +1,6 @@
 # FAST AND ACCURATE READING COMPREHENSION BY COMBINING SELF-ATTENTION AND CONVOLUTION
 A Tensorflow implementation of Google's [Fast Reading Comprehension (FRC)](https://openreview.net/pdf?id=B14TlG-RW) from [ICLR2018](https://openreview.net/forum?id=B14TlG-RW).
-Training and preprocessing pipeline has been adopted from [R-Net by HKUST-KnowComp](https://github.com/HKUST-KnowComp/R-Net). Demo mode needs to be reimplemented. If you are here for the demo please use [dev](https://github.com/minsangkim142/Reading-Comprehension-without-RNNs/tree/dev) branch.
+Training and preprocessing pipeline has been adopted from [R-Net by HKUST-KnowComp](https://github.com/HKUST-KnowComp/R-Net). Demo mode is working. After training, just use `python config.py --mode demo` to run an interactive demo server.
 
 Due to memory issue, a single head dot-product attention is used as opposed to 8 heads multi-head attention as mentioned in the original paper. Also hidden size is reduced to 96 from 128 due to using GTX1080 compared to p100 in the paper. (8GB GPU memory is insufficient. If you have a 12GB memory GPU please share your results with us.)
 
@@ -30,10 +30,15 @@ sh download.sh
 python config.py --mode prepro
 ```
 
-Just like [R-Net by HKUST-KnowComp](https://github.com/HKUST-KnowComp/R-Net), hyper parameters are stored in config.py. To debug/train/test the model, run
+Just like [R-Net by HKUST-KnowComp](https://github.com/HKUST-KnowComp/R-Net), hyper parameters are stored in config.py. To debug/train/test/demo the model, run
 
 ```bash
-python evaluate-v1.1.py ~/data/squad/dev-v1.1.json log/answer/answer.json
+python config.py --mode debug/train/test/demo
+```
+
+To evaluate the model with official code, run
+```bash
+python evaluate-v1.1.py ~/data/squad/dev-v1.1.json train/answer/answer.json
 ```
 
 The default directory for tensorboard log file is `log/event`

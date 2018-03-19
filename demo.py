@@ -11,6 +11,11 @@ import numpy as np
 from prepro import convert_to_features, word_tokenize
 from time import sleep
 
+'''
+This file is taken and modified from R-Net by Minsangkim142
+https://github.com/minsangkim142/R-net
+'''
+
 app = bottle.Bottle()
 query = []
 response = ""

@@ -77,6 +77,7 @@ class Model(object):
             ch_emb = tf.nn.dropout(ch_emb, 1.0 - 0.5 * self.dropout)
             qh_emb = tf.nn.dropout(qh_emb, 1.0 - 0.5 * self.dropout)
 
+			# Bidaf style conv-highway encoder
             ch_emb = conv(ch_emb, d,
                 bias = True, activation = tf.nn.relu, kernel_size = 5, name = "char_conv", reuse = None)
             qh_emb = conv(qh_emb, d,

@@ -22,7 +22,6 @@ class Model(object):
                 self.c, self.q, self.ch, self.qh, self.y1, self.y2, self.qa_id = batch.get_next()
 
             # self.word_unk = tf.get_variable("word_unk", shape = [config.glove_dim], initializer=initializer())
-            # self.char_unk = tf.get_variable("char_unk", shape = [config.char_dim], initializer=initializer())
             self.word_mat = tf.get_variable("word_mat", initializer=tf.constant(
                 word_mat, dtype=tf.float32), trainable=False)
             self.char_mat = tf.get_variable(
@@ -78,9 +77,9 @@ class Model(object):
             ch_emb = tf.nn.dropout(ch_emb, 1.0 - 0.5 * self.dropout)
             qh_emb = tf.nn.dropout(qh_emb, 1.0 - 0.5 * self.dropout)
 
-            ch_emb = conv(ch_emb, dc,
+            ch_emb = conv(ch_emb, d,
                 bias = True, activation = tf.nn.relu, kernel_size = 5, name = "char_conv", reuse = None)
-            qh_emb = conv(qh_emb, dc,
+            qh_emb = conv(qh_emb, d,
                 bias = True, activation = tf.nn.relu, kernel_size = 5, name = "char_conv", reuse = True)
 
             ch_emb = tf.reduce_max(ch_emb, axis = 1)
@@ -131,8 +130,8 @@ class Model(object):
             S_ = tf.nn.softmax(mask_logits(S, mask = mask_q))
             mask_c = tf.expand_dims(self.c_mask, 2)
             S_T = tf.transpose(tf.nn.softmax(mask_logits(S, mask = mask_c), dim = 1),(0,2,1))
-            self.c2q = tf.nn.dropout(tf.matmul(S_, q), 1.0 - self.dropout)
-            self.q2c = tf.nn.dropout(tf.matmul(tf.matmul(S_, S_T), c), 1.0 - self.dropout)
+            self.c2q = tf.matmul(S_, q)
+            self.q2c = tf.matmul(tf.matmul(S_, S_T), c)
             attention_outputs = [c, self.c2q, c * self.c2q]
             if config.q2c:
                 attention_outputs.append(c * self.q2c)

@@ -17,7 +17,7 @@ Pretrained [GloVe embeddings](https://nlp.stanford.edu/projects/glove/) obtained
   * NumPy
   * tqdm
   * TensorFlow>=1.5
-  * spacy>=2.0
+  * spacy==2.0.9 (only if you want to load the [pretrained model](https://drive.google.com/open?id=1gJtcPBNuDr9_2LuP_4x_4VN6_5fQCdfB), otherwise lower versions are fine)
   * bottle (only for demo)
 
 ## Usage

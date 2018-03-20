@@ -280,8 +280,6 @@ def dot_product_attention(q,
     A Tensor.
     """
     with tf.variable_scope(scope, default_name="dot_product_attention", reuse = reuse):
-        # q = tf.nn.relu(q)
-        # k = tf.nn.relu(k)
         # [batch, num_heads, query_length, memory_length]
         logits = tf.matmul(q, k, transpose_b=True)
         if bias:

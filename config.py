@@ -19,9 +19,9 @@ glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 train_dir = "train"
 model_name = "FRC"
-dir_name = os.path.join(train_dir, model_name)\
+dir_name = os.path.join(train_dir, model_name)
 if not os.path.exists(train_dir):
-	os.mkdir(train_dir)
+    os.mkdir(train_dir)
 if not os.path.exists(os.path.join(os.getcwd(),dir_name)):
     os.mkdir(os.path.join(os.getcwd(),dir_name))
 target_dir = "data"
@@ -93,7 +93,7 @@ flags.DEFINE_integer("char_count_limit", -1, "Min count for char")
 flags.DEFINE_integer("capacity", 15000, "Batch size of dataset shuffle")
 flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
 flags.DEFINE_boolean("is_bucket", False, "build bucket batch iterator or not")
-flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
+flags.DEFINE_integer("bucket_range", [40, 401, 40], "the range of bucket")
 
 flags.DEFINE_integer("batch_size", 32, "Batch size")
 flags.DEFINE_integer("num_steps", 60000, "Number of steps")

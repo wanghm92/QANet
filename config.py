@@ -19,7 +19,7 @@ glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 train_dir = "train"
 model_name = "FRC"
-dir_name = os.path.join(train_dir, model_name)\
+dir_name = os.path.join(train_dir, model_name)
 if not os.path.exists(train_dir):
 	os.mkdir(train_dir)
 if not os.path.exists(os.path.join(os.getcwd(),dir_name)):

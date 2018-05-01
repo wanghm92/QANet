@@ -12,9 +12,9 @@ from main import train, test, demo
 flags = tf.flags
 
 home = os.path.expanduser("~")
-train_file = os.path.join(home, "data", "squad", "train-v1.1.json")
-dev_file = os.path.join(home, "data", "squad", "dev-v1.1.json")
-test_file = os.path.join(home, "data", "squad", "dev-v1.1.json")
+train_file = os.path.join(home, "data", "squad", "original", "dev-v1.1.json")
+dev_file = os.path.join(home, "data", "squad", "original", "dev-v1.1.json")
+test_file = os.path.join(home, "data", "squad", "original", "dev-v1.1.json")
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 train_dir = "train"

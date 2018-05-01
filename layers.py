@@ -211,7 +211,7 @@ def conv(inputs, output_size, bias = None, activation = None, kernel_size = 1, n
 def mask_logits(inputs, mask, mask_value = -1e30):
     shapes = inputs.shape.as_list()
     mask = tf.cast(mask, tf.float32)
-    return inputs + mask_value * (1 - mask)
+    return inputs + mask_value * (1 - mask) # subtract 1e30 at padding positions, softmax weight becomes ~0
 
 def depthwise_separable_convolution(inputs, kernel_size, num_filters,
                                     scope = "depthwise_separable_convolution",

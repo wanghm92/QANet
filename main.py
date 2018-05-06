@@ -57,6 +57,8 @@ def train(config):
 
         loss_save = 100.0
         patience = 0
+        best_em = 0.0
+        best_f1 = 0.0
 
         with tf.Session(config=sess_config) as sess:
 
@@ -65,7 +67,7 @@ def train(config):
             train_handle = sess.run(train_iterator.string_handle())
             dev_handle = sess.run(dev_iterator.string_handle())
 
-            saver = tf.train.Saver()
+            saver = tf.train.Saver(max_to_keep=100)
             if os.path.exists(os.path.join(config.save_dir, "checkpoint")):
                 saver.restore(sess, tf.train.latest_checkpoint(config.save_dir))
 
@@ -99,12 +101,33 @@ def train(config):
                     metrics, summ = evaluate_batch(model, dev_total // config.batch_size + 1,
                                                    dev_eval_file, sess, "dev", handle, dev_handle)
 
-                    dev_loss = metrics["loss"]
+                    # optimization from jasonwbw
+                    # early stop
+                    dev_f1 = metrics["f1"]
+                    dev_em = metrics["exact_match"]
+                    if dev_f1 < best_f1 and dev_em < best_em:
+                        patience += 1
+                        if patience > config.early_stop:
+                            print('>>>>>> WARNING !!! <<<<<<< Early_stop reached!!!')
+                    # save best model
+                    else:
+                        patience = 0
+                        if dev_em >= best_em:
+                            best_em = dev_em
+                            filename = os.path.join(config.save_dir, "model_{}.bestem".format(global_step))
+                            saver.save(sess, filename)
+                            if dev_f1 >= best_f1:
+                                best_f1 = dev_f1
+                                filename = os.path.join(config.save_dir, "model_{}.bestf1".format(global_step))
+                                saver.save(sess, filename)
+
                     for s in summ:
                         writer.add_summary(s, global_step)
                     writer.flush()
                     filename = os.path.join(config.save_dir, "model_{}.ckpt".format(global_step))
                     saver.save(sess, filename)
+                    # save best dev model
+
 
 
 def evaluate_batch(model, num_batches, eval_file, sess, data_type, handle, str_handle):
@@ -113,7 +136,6 @@ def evaluate_batch(model, num_batches, eval_file, sess, data_type, handle, str_h
     for _ in tqdm(range(1, num_batches + 1)):
         qa_id, loss, yp1, yp2, = sess.run([model.qa_id, model.loss, model.yp1, model.yp2],
                                           feed_dict={handle: str_handle})
-        # TODO: READ
         answer_dict_, _ = convert_tokens(eval_file, qa_id.tolist(), yp1.tolist(), yp2.tolist())
         answer_dict.update(answer_dict_)
         losses.append(loss)
@@ -151,10 +173,9 @@ def test(config):
     total = meta["total"]
 
     graph = tf.Graph()
-    print("Loading model...")
     with graph.as_default() as g:
-        test_batch = get_dataset(config.test_record_file, get_record_parser(
-            config, is_test=True), config).make_one_shot_iterator()
+        test_batch = get_dataset(config.test_record_file, get_record_parser(config, is_test=True),
+                                 config).make_one_shot_iterator()
 
         model = Model(config, test_batch, word_mat, char_mat, trainable=False, graph = g)
 
@@ -164,7 +185,11 @@ def test(config):
         with tf.Session(config=sess_config) as sess:
             sess.run(tf.global_variables_initializer())
             saver = tf.train.Saver()
+            # model_path = os.path.join(config.save_dir, 'model_79000.bestckpt')
             saver.restore(sess, tf.train.latest_checkpoint(config.save_dir))
+            print("Model Loaded from --> {}".format(tf.train.latest_checkpoint(config.save_dir)))
+            # saver.restore(sess, model_path)
+            # print("Model Loaded from --> {}".format(model_path))
             if config.decay < 1.0:
                 sess.run(model.assign_vars)
             losses = []

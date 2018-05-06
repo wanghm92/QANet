@@ -11,39 +11,43 @@ from main import train, test, demo
 
 flags = tf.flags
 
-home = os.path.expanduser("~")
-train_file = os.path.join(home, "data", "squad", "original", "dev-v1.1.json")
-dev_file = os.path.join(home, "data", "squad", "original", "dev-v1.1.json")
-test_file = os.path.join(home, "data", "squad", "original", "dev-v1.1.json")
+home= os.path.expanduser("~")
+mhrc = os.path.abspath("../")
+train_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.train.qplusa.squad.json")
+dev_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
+test_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
-train_dir = "train"
-model_name = "FRC"
-dir_name = os.path.join(train_dir, model_name)
-if not os.path.exists(train_dir):
-    os.mkdir(train_dir)
-if not os.path.exists(os.path.join(os.getcwd(),dir_name)):
-    os.mkdir(os.path.join(os.getcwd(),dir_name))
-target_dir = "data"
-log_dir = os.path.join(dir_name, "event")
-save_dir = os.path.join(dir_name, "model")
-answer_dir = os.path.join(dir_name, "answer")
-train_record_file = os.path.join(target_dir, "train.tfrecords")
-dev_record_file = os.path.join(target_dir, "dev.tfrecords")
-test_record_file = os.path.join(target_dir, "test.tfrecords")
-word_emb_file = os.path.join(target_dir, "word_emb.json")
-char_emb_file = os.path.join(target_dir, "char_emb.json")
-train_eval = os.path.join(target_dir, "train_eval.json")
-dev_eval = os.path.join(target_dir, "dev_eval.json")
-test_eval = os.path.join(target_dir, "test_eval.json")
-dev_meta = os.path.join(target_dir, "dev_meta.json")
-test_meta = os.path.join(target_dir, "test_meta.json")
-word_dictionary = os.path.join(target_dir, "word_dictionary.json")
-char_dictionary = os.path.join(target_dir, "char_dictionary.json")
+out_dir = "output"
+# model_name = "mhrc_qplusa"
+model_name = "temp"
+model_out_path = os.path.join(out_dir, model_name)
+if not os.path.exists(out_dir):
+    os.mkdir(out_dir)
+if not os.path.exists(os.path.join(os.getcwd(),model_out_path)):
+    os.mkdir(os.path.join(os.getcwd(),model_out_path))
+    
+# prepro_out = "mhrc_qplusa_prepro"
+prepro_out = "temp"
+log_dir = os.path.join(model_out_path, "event")
+save_dir = os.path.join(model_out_path, "model")
+answer_dir = os.path.join(model_out_path, "answer")
+train_record_file = os.path.join(prepro_out, "train.tfrecords")
+dev_record_file = os.path.join(prepro_out, "dev.tfrecords")
+test_record_file = os.path.join(prepro_out, "test.tfrecords")
+word_emb_file = os.path.join(prepro_out, "word_emb.json")
+char_emb_file = os.path.join(prepro_out, "char_emb.json")
+train_eval = os.path.join(prepro_out, "train_eval.json")
+dev_eval = os.path.join(prepro_out, "dev_eval.json")
+test_eval = os.path.join(prepro_out, "test_eval.json")
+dev_meta = os.path.join(prepro_out, "dev_meta.json")
+test_meta = os.path.join(prepro_out, "test_meta.json")
+word_dictionary = os.path.join(prepro_out, "word_dictionary.json")
+char_dictionary = os.path.join(prepro_out, "char_dictionary.json")
 answer_file = os.path.join(answer_dir, "answer.json")
 
-if not os.path.exists(target_dir):
-    os.makedirs(target_dir)
+if not os.path.exists(prepro_out):
+    os.makedirs(prepro_out)
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 if not os.path.exists(save_dir):
@@ -53,7 +57,8 @@ if not os.path.exists(answer_dir):
 
 flags.DEFINE_string("mode", "train", "Running mode train/debug/test")
 
-flags.DEFINE_string("target_dir", target_dir, "Target directory for out data")
+flags.DEFINE_string("prepro_out", prepro_out, "Directory for preprocessing output")
+flags.DEFINE_string("model_name", model_name, "Name for model trained")
 flags.DEFINE_string("log_dir", log_dir, "Directory for tf event")
 flags.DEFINE_string("save_dir", save_dir, "Directory for saving model")
 flags.DEFINE_string("train_file", train_file, "Train source file")
@@ -107,7 +112,9 @@ flags.DEFINE_float("decay", 0.9999, "Exponential moving average decay")
 flags.DEFINE_float("l2_norm", 3e-7, "L2 norm scale")
 flags.DEFINE_integer("hidden", 96, "Hidden size")
 flags.DEFINE_integer("num_heads", 1, "Number of heads in self attention")
-flags.DEFINE_boolean("q2c", True, "Whether to use query to context attention or not")
+# TODO: remove
+# flags.DEFINE_boolean("q2c", True, "Whether to use query to context attention or not")
+flags.DEFINE_integer("early_stop", 10, "Checkpoints for early stop")
 
 # Extensions (Uncomment corresponding code in download.sh to download the required data)
 glove_char_file = os.path.join(home, "data", "glove", "glove.840B.300d-char.txt")

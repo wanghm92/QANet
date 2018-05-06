@@ -1,6 +1,7 @@
 import tensorflow as tf
 import sys
-from layers import initializer, regularizer, residual_block, highway, conv, mask_logits, trilinear, total_params
+from layers import initializer, regularizer, residual_block, highway, conv, \
+    mask_logits, trilinear, total_params, optimized_trilinear_for_attention
 
 class Model(object):
     def __init__(self, config, batch,
@@ -206,9 +207,14 @@ class Model(object):
                 self.c2q: (N, c_maxlen, d) = tf.matmul(S_, q)
                 self.q2c: (N, c_maxlen, d) = tf.matmul(tf.matmul(S_, S_T), c)
             '''
-            C = tf.tile(tf.expand_dims(c,2),[1,1,self.q_maxlen,1])
-            Q = tf.tile(tf.expand_dims(q,1),[1,self.c_maxlen,1,1])
-            S = trilinear([C, Q, C*Q], input_keep_prob = 1.0 - self.dropout)
+            # change from commit f0c79cc93dc1dfdad2bc8abb712a53d078814a56 by Min on 27 Apr 18
+            # C = tf.tile(tf.expand_dims(c,2),[1,1,self.q_maxlen,1])
+            # Q = tf.tile(tf.expand_dims(q,1),[1,self.c_maxlen,1,1])
+            # S = trilinear([C, Q, C*Q], input_keep_prob = 1.0 - self.dropout)
+
+            # optimization from jasonwbw
+            S = optimized_trilinear_for_attention([c, q], self.c_maxlen, self.q_maxlen,
+                                                  input_keep_prob=1.0 - self.dropout)
 
             mask_q = tf.expand_dims(self.q_mask, 1)
             S_ = tf.nn.softmax(mask_logits(S, mask = mask_q))
@@ -218,9 +224,10 @@ class Model(object):
             self.c2q = tf.matmul(S_, q)
             self.q2c = tf.matmul(tf.matmul(S_, S_T), c)
 
-            attention_outputs = [c, self.c2q, c * self.c2q]
-            if config.q2c:
-                attention_outputs.append(c * self.q2c)
+            # change from commit f0c79cc93dc1dfdad2bc8abb712a53d078814a56 by Min on 27 Apr 18
+            attention_outputs = [c, self.c2q, c * self.c2q, c * self.q2c]
+            # if config.q2c:
+            #     attention_outputs.append(c * self.q2c)
 
         with tf.variable_scope("Model_Encoder_Layer"):
             inputs = tf.concat(attention_outputs, axis = -1)
@@ -270,7 +277,8 @@ class Model(object):
             # find max-score span
             outer = tf.matmul(tf.expand_dims(tf.nn.softmax(logits1), axis=2),
                               tf.expand_dims(tf.nn.softmax(logits2), axis=1))
-            outer = tf.matrix_band_part(outer, 0, 15)
+            # change from commit f0c79cc93dc1dfdad2bc8abb712a53d078814a56 by Min on 27 Apr 18
+            outer = tf.matrix_band_part(outer, 0, config.ans_limit)
             self.yp1 = tf.argmax(tf.reduce_max(outer, axis=2), axis=1)
             self.yp2 = tf.argmax(tf.reduce_max(outer, axis=1), axis=1)
 
@@ -289,16 +297,19 @@ class Model(object):
             with tf.control_dependencies([ema_op]):
                 self.loss = tf.identity(self.loss)
 
-                self.shadow_vars = []
-                self.global_vars = []
+                # change from commit f0c79cc93dc1dfdad2bc8abb712a53d078814a56 by Min on 27 Apr 18
+                self.assign_vars = []
+                # self.shadow_vars = []
+                # self.global_vars = []
                 for var in tf.global_variables():
                     v = self.var_ema.average(var)
                     if v:
-                        self.shadow_vars.append(v)
-                        self.global_vars.append(var)
-                self.assign_vars = []
-                for g,v in zip(self.global_vars, self.shadow_vars):
-                    self.assign_vars.append(tf.assign(g,v))
+                        self.assign_vars.append(tf.assign(var, v))
+                        # self.shadow_vars.append(v)
+                        # self.global_vars.append(var)
+                # self.assign_vars = []
+                # for g,v in zip(self.global_vars, self.shadow_vars):
+                #     self.assign_vars.append(tf.assign(g,v))
 
     def get_loss(self):
         return self.loss

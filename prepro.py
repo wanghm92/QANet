@@ -93,8 +93,8 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, size=None, vec_si
     if emb_file is not None:
         assert size is not None
         assert vec_size is not None
-        with open(emb_file, "r", encoding="utf-8") as fh:
-            for line in tqdm(fh, total=size):
+        with open(emb_file, "r", encoding="utf-8") as fin:
+            for line in tqdm(fin, total=size):
                 array = line.split()
                 word = "".join(array[0:-vec_size])
                 vector = list(map(float, array[-vec_size:]))
@@ -187,11 +187,16 @@ def convert_to_features(config, data, word2idx_dict, char2idx_dict):
 
 def build_features(config, examples, data_type, out_file, word2idx_dict, char2idx_dict, is_test=False):
 
+    """
+        Converting tokens to np.arrays of indices
+    """
+
     para_limit = config.test_para_limit if is_test else config.para_limit
     ques_limit = config.test_ques_limit if is_test else config.ques_limit
     ans_limit = 100 if is_test else config.ans_limit
     char_limit = config.char_limit
 
+    # TODO: limit to max_len instead of filter them out!
     def filter_func(example, is_test=False):
         return len(example["context_tokens"]) > para_limit or \
                len(example["ques_tokens"]) > ques_limit or \
@@ -203,6 +208,11 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
     total_ = 0
     meta = {}
     for example in tqdm(examples):
+        '''
+            example = {"context_tokens": context_tokens, "context_chars": context_chars,
+               "ques_tokens": ques_tokens,"ques_chars": ques_chars,
+               "y1s": y1s, "y2s": y2s, "id": total}
+        '''
         total_ += 1
 
         if filter_func(example, is_test): continue
@@ -215,34 +225,34 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         y1 = np.zeros([para_limit], dtype=np.float32)
         y2 = np.zeros([para_limit], dtype=np.float32)
 
-        def _get_word(word):
+        def _get_word_idx(word):
             for each in (word, word.lower(), word.capitalize(), word.upper()):
                 if each in word2idx_dict:
                     return word2idx_dict[each]
-            return 1
+            return 1 # OOV
 
-        def _get_char(char):
+        def _get_char_idx(char):
             if char in char2idx_dict:
                 return char2idx_dict[char]
-            return 1
+            return 1 # OOV
 
         for i, token in enumerate(example["context_tokens"]):
-            context_idxs[i] = _get_word(token)
+            context_idxs[i] = _get_word_idx(token)
 
         for i, token in enumerate(example["ques_tokens"]):
-            ques_idxs[i] = _get_word(token)
+            ques_idxs[i] = _get_word_idx(token)
 
         for i, token in enumerate(example["context_chars"]):
             for j, char in enumerate(token):
                 if j == char_limit:
-                    break
-                context_char_idxs[i, j] = _get_char(char)
+                    break # discard chars beyond limit
+                context_char_idxs[i, j] = _get_char_idx(char)
 
         for i, token in enumerate(example["ques_chars"]):
             for j, char in enumerate(token):
                 if j == char_limit:
                     break
-                ques_char_idxs[i, j] = _get_char(char)
+                ques_char_idxs[i, j] = _get_char_idx(char)
 
         start, end = example["y1s"][-1], example["y2s"][-1]
         y1[start], y2[end] = 1.0, 1.0
@@ -263,7 +273,8 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         record = tf.train.Example(features=tf.train.Features(feature={
             "context_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[context_idxs.tostring()])),
             "ques_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_idxs.tostring()])),
-            "context_char_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[context_char_idxs.tostring()])),
+            "context_char_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(
+                value=[context_char_idxs.tostring()])),
             "ques_char_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_char_idxs.tostring()])),
             "y1": tf.train.Feature(bytes_list=tf.train.BytesList(value=[y1.tostring()])),
             "y2": tf.train.Feature(bytes_list=tf.train.BytesList(value=[y2.tostring()])),
@@ -285,10 +296,17 @@ def save(filename, obj, message=None):
 
 def prepro(config):
     word_counter, char_counter = Counter(), Counter()
+    # process_file
     train_examples, train_eval = process_file(config.train_file, "train", word_counter, char_counter)
-    dev_examples, dev_eval = process_file(config.dev_file, "dev", word_counter, char_counter)
-    test_examples, test_eval = process_file(config.test_file, "test", word_counter, char_counter)
+    save(config.train_eval_file, train_eval, message="train eval")
 
+    dev_examples, dev_eval = process_file(config.dev_file, "dev", word_counter, char_counter)
+    save(config.dev_eval_file, dev_eval, message="dev eval")
+
+    test_examples, test_eval = process_file(config.test_file, "test", word_counter, char_counter)
+    save(config.test_eval_file, test_eval, message="test eval")
+
+    # get_embedding
     word_emb_file = config.fasttext_file if config.fasttext else config.glove_word_file
     char_emb_file = config.glove_char_file if config.pretrained_char else None
     char_emb_size = config.glove_char_size if config.pretrained_char else None
@@ -296,20 +314,20 @@ def prepro(config):
 
     word_emb_mat, word2idx_dict = get_embedding(word_counter, "word", emb_file=word_emb_file,
                                                 size=config.glove_word_size, vec_size=config.glove_dim)
+    save(config.word_emb_file, word_emb_mat, message="word embedding")
+    save(config.word_dictionary, word2idx_dict, message="word dictionary")
+
     char_emb_mat, char2idx_dict = get_embedding(char_counter, "char", emb_file=char_emb_file,
                                                 size=char_emb_size, vec_size=char_emb_dim)
+    save(config.char_emb_file, char_emb_mat, message="char embedding")
+    save(config.char_dictionary, char2idx_dict, message="char dictionary")
 
+    # build_features
     build_features(config, train_examples, "train", config.train_record_file, word2idx_dict, char2idx_dict)
     dev_meta = build_features(config, dev_examples, "dev", config.dev_record_file, word2idx_dict, char2idx_dict)
+    save(config.dev_meta, dev_meta, message="dev meta")
+
     test_meta = build_features(config, test_examples, "test", config.test_record_file,
                                word2idx_dict, char2idx_dict, is_test=True)
-
-    save(config.word_emb_file, word_emb_mat, message="word embedding")
-    save(config.char_emb_file, char_emb_mat, message="char embedding")
-    save(config.train_eval_file, train_eval, message="train eval")
-    save(config.dev_eval_file, dev_eval, message="dev eval")
-    save(config.test_eval_file, test_eval, message="test eval")
-    save(config.dev_meta, dev_meta, message="dev meta")
     save(config.test_meta, test_meta, message="test meta")
-    save(config.word_dictionary, word2idx_dict, message="word dictionary")
-    save(config.char_dictionary, char2idx_dict, message="char dictionary")
+

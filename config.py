@@ -20,7 +20,7 @@ glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 out_dir = "output"
 # model_name = "mhrc_qplusa"
-model_name = "temp"
+model_name = "mhrc_qplusa_clipped"
 model_out_path = os.path.join(out_dir, model_name)
 if not os.path.exists(out_dir):
     os.mkdir(out_dir)
@@ -28,7 +28,7 @@ if not os.path.exists(os.path.join(os.getcwd(),model_out_path)):
     os.mkdir(os.path.join(os.getcwd(),model_out_path))
     
 # prepro_out = "mhrc_qplusa_prepro"
-prepro_out = "temp"
+prepro_out = "mhrc_qplusa_clipped_prepro"
 log_dir = os.path.join(model_out_path, "event")
 save_dir = os.path.join(model_out_path, "model")
 answer_dir = os.path.join(model_out_path, "answer")
@@ -86,11 +86,11 @@ flags.DEFINE_integer("glove_word_size", int(2.2e6), "Corpus size for Glove")
 flags.DEFINE_integer("glove_dim", 300, "Embedding dimension for Glove")
 flags.DEFINE_integer("char_dim", 64, "Embedding dimension for char")
 
-flags.DEFINE_integer("para_limit", 400, "Limit length for paragraph")
+flags.DEFINE_integer("para_limit", 1200, "Limit length for paragraph")
 flags.DEFINE_integer("ques_limit", 50, "Limit length for question")
 flags.DEFINE_integer("ans_limit", 30, "Limit length for answers")
-flags.DEFINE_integer("test_para_limit", 1000, "Limit length for paragraph in test file")
-flags.DEFINE_integer("test_ques_limit", 100, "Limit length for question in test file")
+flags.DEFINE_integer("test_para_limit", 1200, "Limit length for paragraph in test file")
+flags.DEFINE_integer("test_ques_limit", 50, "Limit length for question in test file")
 flags.DEFINE_integer("char_limit", 16, "Limit length for character")
 flags.DEFINE_integer("word_count_limit", -1, "Min count for word")
 flags.DEFINE_integer("char_count_limit", -1, "Min count for char")
@@ -100,7 +100,7 @@ flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
 flags.DEFINE_boolean("is_bucket", False, "build bucket batch iterator or not")
 flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
 
-flags.DEFINE_integer("batch_size", 32, "Batch size")
+flags.DEFINE_integer("batch_size", 12, "Batch size")
 flags.DEFINE_integer("num_steps", 60000, "Number of steps")
 flags.DEFINE_integer("checkpoint", 1000, "checkpoint to save and evaluate the model")
 flags.DEFINE_integer("period", 100, "period to save batch loss")
@@ -112,8 +112,6 @@ flags.DEFINE_float("decay", 0.9999, "Exponential moving average decay")
 flags.DEFINE_float("l2_norm", 3e-7, "L2 norm scale")
 flags.DEFINE_integer("hidden", 96, "Hidden size")
 flags.DEFINE_integer("num_heads", 1, "Number of heads in self attention")
-# TODO: remove
-# flags.DEFINE_boolean("q2c", True, "Whether to use query to context attention or not")
 flags.DEFINE_integer("early_stop", 10, "Checkpoints for early stop")
 
 # Extensions (Uncomment corresponding code in download.sh to download the required data)

@@ -34,7 +34,12 @@ def convert_idx(text, tokens):
     return spans
 
 
-def process_file(filename, data_type, word_counter, char_counter):
+# def process_file(filename, data_type, word_counter, char_counter):
+def process_file(config, filename, data_type, word_counter, char_counter, is_test=False):
+
+    para_limit = config.test_para_limit if is_test else config.para_limit
+    ques_limit = config.test_ques_limit if is_test else config.ques_limit
+
     print("Generating {} examples...".format(data_type))
     examples = []
     eval_examples = {}
@@ -45,17 +50,26 @@ def process_file(filename, data_type, word_counter, char_counter):
             for para in article["paragraphs"]:
                 context = para["context"].replace("''", '" ').replace("``", '" ')
                 context_tokens = word_tokenize(context)
+
+                # discard tokens longer than limit
+                if len(context_tokens) > para_limit:
+                    context_tokens = context_tokens[:para_limit]
+
                 context_chars = [list(token) for token in context_tokens]
                 spans = convert_idx(context, context_tokens)
+                max_span = spans[-1][1]
 
                 for token in context_tokens:
                     word_counter[token] += len(para["qas"])
                     for char in token:
                         char_counter[char] += len(para["qas"])
                 for qa in para["qas"]:
-                    total += 1
                     ques = qa["question"].replace("''", '" ').replace("``", '" ')
                     ques_tokens = word_tokenize(ques)
+
+                    # discard tokens longer than limit
+                    if len(ques_tokens) > ques_limit: ques_tokens = ques_tokens[:ques_limit]
+
                     ques_chars = [list(token) for token in ques_tokens]
                     for token in ques_tokens:
                         word_counter[token] += 1
@@ -67,6 +81,11 @@ def process_file(filename, data_type, word_counter, char_counter):
                         answer_text = answer["text"]
                         answer_start = answer['answer_start']
                         answer_end = answer_start + len(answer_text)
+
+                        # TODO: predict answer for dev/test samples even without answer span !!!
+                        # discard answers not within #para_limit words
+                        if answer_start > max_span or answer_end > max_span: continue
+
                         answer_texts.append(answer_text)
                         answer_span = []
                         for idx, span in enumerate(spans):
@@ -75,14 +94,22 @@ def process_file(filename, data_type, word_counter, char_counter):
                         y1, y2 = answer_span[0], answer_span[-1]
                         y1s.append(y1)
                         y2s.append(y2)
-                    example = {"context_tokens": context_tokens, "context_chars": context_chars,
-                               "ques_tokens": ques_tokens,"ques_chars": ques_chars,
-                               "y1s": y1s, "y2s": y2s, "id": total}
-                    examples.append(example)
-                    eval_examples[str(total)] = {"context": context, "spans": spans,
+
+                    # TODO: predict answer for dev/test samples even without answer span !!!
+                    # include sample only if answer exists
+                    if answer_texts and y1s and y2s:
+                        total += 1 # only increment counter if example is included
+                        example = {"context_tokens": context_tokens, "context_chars": context_chars,
+                                   "ques_tokens": ques_tokens,"ques_chars": ques_chars,
+                                   "y1s": y1s, "y2s": y2s, "id": total}
+                        examples.append(example)
+
+                        # context is still complete but spans and context_tokens etc are clipped
+                        eval_examples[str(total)] = {"context": context, "spans": spans,
                                                  "answers": answer_texts, "uuid": qa["id"]}
         random.shuffle(examples)
         print("{} questions in total".format(len(examples)))
+
     return examples, eval_examples
 
 
@@ -193,14 +220,15 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
 
     para_limit = config.test_para_limit if is_test else config.para_limit
     ques_limit = config.test_ques_limit if is_test else config.ques_limit
+
+    #TODO: change hard-coded number to config parameter
     ans_limit = 100 if is_test else config.ans_limit
     char_limit = config.char_limit
 
-    # TODO: limit to max_len instead of filter them out!
-    def filter_func(example, is_test=False):
-        return len(example["context_tokens"]) > para_limit or \
-               len(example["ques_tokens"]) > ques_limit or \
-               (example["y2s"][0] - example["y1s"][0]) > ans_limit
+    # def filter_func(example, is_test=False):
+    #     return len(example["context_tokens"]) > para_limit or \
+    #            len(example["ques_tokens"]) > ques_limit or \
+    #            (example["y2s"][0] - example["y1s"][0]) > ans_limit
 
     print("Processing {} examples...".format(data_type))
     writer = tf.python_io.TFRecordWriter(out_file)
@@ -215,7 +243,8 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         '''
         total_ += 1
 
-        if filter_func(example, is_test): continue
+        # TODO: NOTHING
+        # if filter_func(example, is_test): continue
 
         total += 1
         context_idxs = np.zeros([para_limit], dtype=np.int32)
@@ -297,13 +326,11 @@ def save(filename, obj, message=None):
 def prepro(config):
     word_counter, char_counter = Counter(), Counter()
     # process_file
-    train_examples, train_eval = process_file(config.train_file, "train", word_counter, char_counter)
+    train_examples, train_eval = process_file(config, config.train_file, "train", word_counter, char_counter)
     save(config.train_eval_file, train_eval, message="train eval")
-
-    dev_examples, dev_eval = process_file(config.dev_file, "dev", word_counter, char_counter)
+    dev_examples, dev_eval = process_file(config, config.dev_file, "dev", word_counter, char_counter, is_test=True)
     save(config.dev_eval_file, dev_eval, message="dev eval")
-
-    test_examples, test_eval = process_file(config.test_file, "test", word_counter, char_counter)
+    test_examples, test_eval = process_file(config, config.test_file, "test", word_counter, char_counter, is_test=True)
     save(config.test_eval_file, test_eval, message="test eval")
 
     # get_embedding
@@ -324,10 +351,11 @@ def prepro(config):
 
     # build_features
     build_features(config, train_examples, "train", config.train_record_file, word2idx_dict, char2idx_dict)
-    dev_meta = build_features(config, dev_examples, "dev", config.dev_record_file, word2idx_dict, char2idx_dict)
+    dev_meta = build_features(config, dev_examples, "dev", config.dev_record_file, word2idx_dict, char2idx_dict,
+                              is_test=True)
     save(config.dev_meta, dev_meta, message="dev meta")
 
-    test_meta = build_features(config, test_examples, "test", config.test_record_file,
-                               word2idx_dict, char2idx_dict, is_test=True)
+    test_meta = build_features(config, test_examples, "test", config.test_record_file, word2idx_dict, char2idx_dict,
+                               is_test=True)
     save(config.test_meta, test_meta, message="test meta")
 

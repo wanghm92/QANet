@@ -40,35 +40,36 @@ class Model(object):
                                            "id": tf.FixedLenFeature([], tf.int64)
                                        })
                 
-                    c:     Tensor("IteratorGetNext:0", shape=(N, 400), dtype=int32)
+                    c:     Tensor("IteratorGetNext:0", shape=(N, 500), dtype=int32)
                     q:     Tensor("IteratorGetNext:1", shape=(N, 50), dtype=int32)
-                    ch:    Tensor("IteratorGetNext:2", shape=(N, 400, 16), dtype=int32)
+                    ch:    Tensor("IteratorGetNext:2", shape=(N, 500, 16), dtype=int32)
                     qh:    Tensor("IteratorGetNext:3", shape=(N, 50, 16), dtype=int32)
-                    y1:    Tensor("IteratorGetNext:4", shape=(N, 400), dtype=float32)
-                    y2:    Tensor("IteratorGetNext:5", shape=(N, 400), dtype=float32)
+                    y1:    Tensor("IteratorGetNext:4", shape=(N, 500), dtype=float32)
+                    y2:    Tensor("IteratorGetNext:5", shape=(N, 500), dtype=float32)
                     qa_id: Tensor("IteratorGetNext:6", shape=(N,), dtype=int64)
 
                 '''
                 # batch: train_dataset iterator
                 self.c, self.q, self.ch, self.qh, self.y1, self.y2, self.qa_id = batch.get_next()
 
-            # self.word_unk = tf.get_variable("word_unk", shape = [config.glove_dim], initializer=initializer())
             self.word_mat = tf.get_variable("word_mat", initializer=tf.constant(word_mat, dtype=tf.float32),
                                             trainable=False)
             self.char_mat = tf.get_variable("char_mat", initializer=tf.constant(char_mat, dtype=tf.float32))
 
             # all initialized to the max_length matrices with zeros --> 1's cover actual lengths
-            self.c_mask = tf.cast(self.c, tf.bool) # Tensor("Cast:0", shape=(N, 400), dtype=bool)
+            self.c_mask = tf.cast(self.c, tf.bool) # Tensor("Cast:0", shape=(N, 500), dtype=bool)
             self.q_mask = tf.cast(self.q, tf.bool) # Tensor("Cast_1:0", shape=(N, 50), dtype=bool)
-            self.c_len = tf.reduce_sum(tf.cast(self.c_mask, tf.int32), axis=1) # Tensor("Sum:0", shape=(N,), dtype=int32)
-            self.q_len = tf.reduce_sum(tf.cast(self.q_mask, tf.int32), axis=1) # Tensor("Sum:0", shape=(N,), dtype=int32)
+            # Tensor("Sum:0", shape=(N,), dtype=int32)
+            self.c_len = tf.reduce_sum(tf.cast(self.c_mask, tf.int32), axis=1)
+            # Tensor("Sum:0", shape=(N,), dtype=int32)
+            self.q_len = tf.reduce_sum(tf.cast(self.q_mask, tf.int32), axis=1)
 
             '''
                 tf.slice(input_, begin, size, name=None): extracts a slice of size from a tensor input 
                     starting at the location specified by begin. The slice size is represented as a tensor shape, 
                     where size[i] is the number of elements of the 'i'th dimension of input that you want to slice. 
-                    The starting location (begin) for the slice is represented as an offset in each dimension of input.
-                    In other words, begin[i] is the offset into the 'i'th dimension of input that you want to slice from.
+                    The (begin) for the slice is represented as an offset in each dimension of input.
+                    In other words, begin[i] is the offset into the 'i'th dim of input that you want to slice from.
             '''
 
             if opt:
@@ -97,7 +98,7 @@ class Model(object):
             if trainable:
                 self.lr = tf.minimum(config.learning_rate, 0.001 / tf.log(999.)
                                      * tf.log(tf.cast(self.global_step, tf.float32) + 1))
-                self.opt = tf.train.AdamOptimizer(learning_rate = self.lr, beta1 = 0.8, beta2 = 0.999, epsilon = 1e-7)
+                self.opt = tf.train.AdamOptimizer(learning_rate = self.lr,beta1 = 0.8,beta2 = 0.999,epsilon = 1e-7)
                 grads = self.opt.compute_gradients(self.loss)
                 gradients, variables = zip(*grads)
                 capped_grads, _ = tf.clip_by_global_norm(gradients, config.grad_clip)
@@ -139,14 +140,14 @@ class Model(object):
                 self.c : (N, c_maxlen)
                 self.q : (N, q_maxlen)
             '''
-            c_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.c), 1.0 - self.dropout) # (N, c_maxlen, 300)
-            q_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.q), 1.0 - self.dropout) # (N, q_maxlen, 300)
+            c_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.c), 1.0 - self.dropout) #(N, c_maxlen, 300)
+            q_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.q), 1.0 - self.dropout) #(N, q_maxlen, 300)
 
             c_emb = tf.concat([c_emb, ch_emb], axis=2) # (N, c_maxlen, 396)
             q_emb = tf.concat([q_emb, qh_emb], axis=2) # (N, q_maxlen, 396)
 
-            c_emb = highway(c_emb, size = d, scope = "highway", dropout = self.dropout, reuse = None) # (N, c_maxlen, 96)
-            q_emb = highway(q_emb, size = d, scope = "highway", dropout = self.dropout, reuse = True) # (N, q_maxlen, 96)
+            c_emb = highway(c_emb, size = d, scope = "highway", dropout = self.dropout, reuse = None) #(N, c_maxlen, 96)
+            q_emb = highway(q_emb, size = d, scope = "highway", dropout = self.dropout, reuse = True) #(N, q_maxlen, 96)
 
         with tf.variable_scope("Embedding_Encoder_Layer"):
             '''

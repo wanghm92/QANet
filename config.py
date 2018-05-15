@@ -13,22 +13,25 @@ flags = tf.flags
 
 home= os.path.expanduser("~")
 mhrc = os.path.abspath("../")
-train_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.train.qplusa.squad.json")
-dev_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
-test_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
+# train_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.train.qplusa.squad.json")
+# dev_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
+# test_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
+train_file = os.path.join(mhrc, "data", "with_cand", "wikihop.train.qplusa.withcand.squad.json")
+dev_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.squad.json")
+test_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.squad.json")
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 out_dir = "output"
-# model_name = "mhrc_qplusa"
-model_name = "mhrc_qplusa_clipped"
+model_name = "mhrc_qplusa_with_cand"
+# model_name = "mhrc_qplusa_clipped"
 model_out_path = os.path.join(out_dir, model_name)
 if not os.path.exists(out_dir):
     os.mkdir(out_dir)
 if not os.path.exists(os.path.join(os.getcwd(),model_out_path)):
     os.mkdir(os.path.join(os.getcwd(),model_out_path))
     
-# prepro_out = "mhrc_qplusa_prepro"
-prepro_out = "mhrc_qplusa_clipped_prepro"
+prepro_out = "mhrc_qplusa_with_cand_prepro"
+# prepro_out = "mhrc_qplusa_clipped_prepro"
 log_dir = os.path.join(model_out_path, "event")
 save_dir = os.path.join(model_out_path, "model")
 answer_dir = os.path.join(model_out_path, "answer")
@@ -57,7 +60,7 @@ if not os.path.exists(answer_dir):
 
 flags.DEFINE_string("mode", "train", "Running mode train/debug/test")
 
-flags.DEFINE_string("prepro_out", prepro_out, "Directory for preprocessing output")
+flags.DEFINE_string("prepro_out", prepro_out, "Directory for pre-processing output")
 flags.DEFINE_string("model_name", model_name, "Name for model trained")
 flags.DEFINE_string("log_dir", log_dir, "Directory for tf event")
 flags.DEFINE_string("save_dir", save_dir, "Directory for saving model")
@@ -80,7 +83,6 @@ flags.DEFINE_string("answer_file", answer_file, "Out file for answer")
 flags.DEFINE_string("word_dictionary", word_dictionary, "Word dictionary")
 flags.DEFINE_string("char_dictionary", char_dictionary, "Character dictionary")
 
-
 flags.DEFINE_integer("glove_char_size", 94, "Corpus size for Glove")
 flags.DEFINE_integer("glove_word_size", int(2.2e6), "Corpus size for Glove")
 flags.DEFINE_integer("glove_dim", 300, "Embedding dimension for Glove")
@@ -92,19 +94,22 @@ flags.DEFINE_integer("ans_limit", 30, "Limit length for answers")
 flags.DEFINE_integer("test_para_limit", 1200, "Limit length for paragraph in test file")
 flags.DEFINE_integer("test_ques_limit", 50, "Limit length for question in test file")
 flags.DEFINE_integer("char_limit", 16, "Limit length for character")
+flags.DEFINE_integer("cand_limit", 100, "Limit length for candidate list")
 flags.DEFINE_integer("word_count_limit", -1, "Min count for word")
 flags.DEFINE_integer("char_count_limit", -1, "Min count for char")
 
-flags.DEFINE_integer("capacity", 15000, "Batch size of dataset shuffle")
+flags.DEFINE_integer("capacity", 15000, "Number of elements from which the new dataset will sample")
 flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
-flags.DEFINE_boolean("is_bucket", False, "build bucket batch iterator or not")
+# TODO: change it back if necessary
+flags.DEFINE_boolean("is_bucket", True, "build bucket batch iterator or not")
 flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
 
-flags.DEFINE_integer("batch_size", 12, "Batch size")
-flags.DEFINE_integer("num_steps", 60000, "Number of steps")
+# TODO: 12 is better
+flags.DEFINE_integer("batch_size", 32, "Batch size")
+flags.DEFINE_integer("num_steps", 120000, "Number of steps")
 flags.DEFINE_integer("checkpoint", 1000, "checkpoint to save and evaluate the model")
 flags.DEFINE_integer("period", 100, "period to save batch loss")
-flags.DEFINE_integer("val_num_batches", 150, "Number of batches to evaluate the model")
+flags.DEFINE_integer("val_num_batches", 100, "Number of train batches to evaluate the model")
 flags.DEFINE_float("dropout", 0.1, "Dropout prob across the layers")
 flags.DEFINE_float("grad_clip", 5.0, "Global Norm gradient clipping rate")
 flags.DEFINE_float("learning_rate", 0.001, "Learning rate")

@@ -1,5 +1,5 @@
 import tensorflow as tf
-import ujson as json
+import json as json
 import numpy as np
 from tqdm import tqdm
 import os, sys
@@ -11,7 +11,7 @@ https://github.com/HKUST-KnowComp/R-Net
 
 from model import Model
 from demo import Demo
-from util import get_record_parser, convert_tokens, evaluate, get_batch_dataset, get_dataset
+from util import get_record_parser, convert_tokens, evaluate, get_batch_dataset, get_dataset, evaluate_cand
 
 def train(config):
     with open(config.word_emb_file, "r") as fh:
@@ -39,22 +39,24 @@ def train(config):
     '''
 
     dev_total = meta["total"]
-    print("Building model...")
+
+    print("get recorded feature parser...")
     parser = get_record_parser(config)
+
     graph = tf.Graph()
     with graph.as_default() as g:
+
+        print("get dataset batch iterator...")
         train_dataset = get_batch_dataset(config.train_record_file, parser, config)
-        dev_dataset = get_dataset(config.dev_record_file, parser, config)
-        handle = tf.placeholder(tf.string, shape=[])
-        iterator = tf.data.Iterator.from_string_handle(handle, train_dataset.output_types, train_dataset.output_shapes)
-        # tr_iter = tf.data.Iterator.from_string_handle(handle, train_dataset.output_types, train_dataset.output_shapes)
-        # dv_iter = tf.data.Iterator.from_string_handle(handle, dev_dataset.output_types, dev_dataset.output_shapes)
         train_iterator = train_dataset.make_one_shot_iterator()
+        dev_dataset = get_dataset(config.dev_record_file, parser, config)
         dev_iterator = dev_dataset.make_one_shot_iterator()
 
+        handle = tf.placeholder(tf.string, shape=[])
+        iterator = tf.data.Iterator.from_string_handle(handle, train_dataset.output_types, train_dataset.output_shapes)
+
+        print("Building model...")
         model = Model(config, iterator, word_mat, char_mat, graph = g)
-        # model = Model(config, tr_iter, word_mat, char_mat, graph = g)
-        # dev_model = Model(config, dv_iter, word_mat, char_mat, trainable=False, graph = g)
 
         sess_config = tf.ConfigProto(allow_soft_placement=True)
         sess_config.gpu_options.allow_growth = True
@@ -62,6 +64,7 @@ def train(config):
         patience = 0
         best_em = 0.0
         best_f1 = 0.0
+        best_acc = 0.0
 
         with tf.Session(config=sess_config) as sess:
 
@@ -80,9 +83,16 @@ def train(config):
             for _ in tqdm(range(global_step, config.num_steps + 1)):
                 global_step = sess.run(model.global_step) + 1
 
-                # train on 1 batch
+                # train on one batch
                 loss, train_op = sess.run([model.loss, model.train_op],
                                           feed_dict={handle: train_handle, model.dropout: config.dropout})
+                # DEBUG
+                # temp = sess.run(model.debug_ops, feed_dict={handle: train_handle, model.dropout: config.dropout})
+                # for t in temp[:4]:
+                #     print(t)
+                # for t in temp[3:]:
+                #     print(t.shape)
+                # sys.exit(0)
 
                 # save batch loss
                 if global_step % config.period == 0:
@@ -93,14 +103,16 @@ def train(config):
                     # evaluate on train
                     print('Evaluating on Train...')
                     num_bt = config.val_num_batches
-                    _, summ = evaluate_batch(model, num_bt, train_eval_file, sess, "train", handle, train_handle)
+                    # _, summ = evaluate_batch(model, num_bt, train_eval_file, sess, "train", handle, train_handle)
+                    _, summ = evaluate_batch_cand(model, num_bt, train_eval_file, sess, "train", handle, train_handle)
                     # write to summary
                     for s in summ: writer.add_summary(s, global_step)
 
                     # evaluate on dev
                     print('Evaluating on Dev...')
                     num_bt = dev_total // config.batch_size + 1
-                    metrics, summ = evaluate_batch(model, num_bt, dev_eval_file, sess, "dev", handle, dev_handle)
+                    # metrics, summ = evaluate_batch(model, num_bt, dev_eval_file, sess, "dev", handle, dev_handle)
+                    metrics, summ = evaluate_batch_cand(model, num_bt, dev_eval_file, sess, "dev", handle, dev_handle)
                     # write to summary
                     for s in summ: writer.add_summary(s, global_step)
                     writer.flush()
@@ -109,23 +121,24 @@ def train(config):
                     saver.save(sess, filename)
 
                     # early stop
-                    dev_f1 = metrics["f1"]
-                    dev_em = metrics["exact_match"]
-                    if dev_f1 < best_f1 and dev_em < best_em:
+                    # dev_f1 = metrics["f1"]
+                    # dev_em = metrics["exact_match"]
+                    dev_acc = metrics["acc"]
+                    if dev_acc < best_acc:
                         patience += 1
                         if patience > config.early_stop:
                             print('>>>>>> WARNING !!! <<<<<<< Early_stop reached!!!')
                     # save best model
                     else:
                         patience = 0
-                        if dev_em >= best_em:
-                            best_em = dev_em
-                            filename = os.path.join(config.save_dir, "model_{}.bestem".format(global_step))
-                            saver.save(sess, filename)
-                            if dev_f1 >= best_f1:
-                                best_f1 = dev_f1
-                                filename = os.path.join(config.save_dir, "model_{}.bestf1".format(global_step))
-                                saver.save(sess, filename)
+
+                        best_acc = dev_acc
+                        filename = os.path.join(config.save_dir, "model_{}.best".format(global_step))
+                        saver.save(sess, filename)
+                            # if dev_f1 >= best_f1:
+                            #     best_f1 = dev_f1
+                            #     filename = os.path.join(config.save_dir, "model_{}.bestf1".format(global_step))
+                            #     saver.save(sess, filename)
 
 
 def evaluate_batch(model, num_batches, eval_file, sess, data_set, handle, str_handle):
@@ -143,6 +156,28 @@ def evaluate_batch(model, num_batches, eval_file, sess, data_set, handle, str_ha
     f1_sum = tf.Summary(value=[tf.Summary.Value(tag="{}/f1".format(data_set), simple_value=metrics["f1"]), ])
     em_sum = tf.Summary(value=[tf.Summary.Value(tag="{}/em".format(data_set), simple_value=metrics["exact_match"]), ])
     return metrics, [loss_sum, f1_sum, em_sum]
+
+def evaluate_batch_cand(model, num_batches, eval_file, sess, data_set, handle, str_handle):
+    pred = []
+    gold = []
+    losses = []
+    metrics = {}
+    for _ in tqdm(range(1, num_batches + 1)):
+        qa_id, loss, logits, yx= sess.run([model.qa_id, model.loss, model.cand_logits, model.yx],
+                                          feed_dict={handle: str_handle})
+        pred.extend(np.argmax(logits, axis=1))
+        gold.extend(np.argmax(yx, axis=1))
+        losses.append(loss)
+    loss = np.mean(losses)
+    correct = [i for i, j in zip(gold, pred) if i == j]
+    acc = 100.0*len(correct)/len(gold)
+    metrics["loss"] = loss
+    metrics["acc"] = acc
+    loss_sum = tf.Summary(value=[tf.Summary.Value(tag="{}/loss".format(data_set), simple_value=metrics["loss"]), ])
+    acc_sum = tf.Summary(value=[tf.Summary.Value(tag="{}/accuracy".format(data_set), simple_value=metrics["acc"]), ])
+    # em_sum = tf.Summary(value=[tf.Summary.Value(tag="{}/em".format(data_set), simple_value=metrics["exact_match"]), ])
+    print("\naccuracy = {:.3f}%".format(acc))
+    return metrics, [loss_sum, acc_sum]
 
 
 def demo(config):

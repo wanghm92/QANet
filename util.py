@@ -14,28 +14,39 @@ def get_record_parser(config, is_test=False):
         para_limit = config.test_para_limit if is_test else config.para_limit
         ques_limit = config.test_ques_limit if is_test else config.ques_limit
         char_limit = config.char_limit
+        cand_limit = config.cand_limit
+
         '''
             tf.parse_single_example: Parses a single Example proto
             tf.decode_raw: Reinterpret the bytes of a string as a vector of numbers.
         '''
         features = tf.parse_single_example(example,
                                            features={
-                                               "context_idxs": tf.FixedLenFeature([], tf.string),
-                                               "ques_idxs": tf.FixedLenFeature([], tf.string),
+                                               "context_idxs":      tf.FixedLenFeature([], tf.string),
+                                               "ques_idxs":         tf.FixedLenFeature([], tf.string),
+                                               "cand_idxs":         tf.FixedLenFeature([], tf.string),
                                                "context_char_idxs": tf.FixedLenFeature([], tf.string),
-                                               "ques_char_idxs": tf.FixedLenFeature([], tf.string),
-                                               "y1": tf.FixedLenFeature([], tf.string),
-                                               "y2": tf.FixedLenFeature([], tf.string),
-                                               "id": tf.FixedLenFeature([], tf.int64)
+                                               "ques_char_idxs":    tf.FixedLenFeature([], tf.string),
+                                               "cand_char_idxs":    tf.FixedLenFeature([], tf.string),
+                                               "cand_label":        tf.FixedLenFeature([], tf.string),
+                                               "y1":                tf.FixedLenFeature([], tf.string),
+                                               "y2":                tf.FixedLenFeature([], tf.string),
+                                               "id":                tf.FixedLenFeature([], tf.int64)
                                            })
-        context_idxs = tf.reshape(tf.decode_raw(features["context_idxs"], tf.int32), [para_limit])
-        ques_idxs = tf.reshape(tf.decode_raw(features["ques_idxs"], tf.int32), [ques_limit])
+        context_idxs =      tf.reshape(tf.decode_raw(features["context_idxs"],      tf.int32), [para_limit])
+        ques_idxs =         tf.reshape(tf.decode_raw(features["ques_idxs"],         tf.int32), [ques_limit])
+        cand_idxs =         tf.reshape(tf.decode_raw(features["cand_idxs"],         tf.int32), [cand_limit])
         context_char_idxs = tf.reshape(tf.decode_raw(features["context_char_idxs"], tf.int32), [para_limit, char_limit])
-        ques_char_idxs = tf.reshape(tf.decode_raw(features["ques_char_idxs"], tf.int32), [ques_limit, char_limit])
-        y1 = tf.reshape(tf.decode_raw(features["y1"], tf.float32), [para_limit])
-        y2 = tf.reshape(tf.decode_raw(features["y2"], tf.float32), [para_limit])
-        qa_id = features["id"]
-        return context_idxs, ques_idxs, context_char_idxs, ques_char_idxs, y1, y2, qa_id
+        ques_char_idxs =    tf.reshape(tf.decode_raw(features["ques_char_idxs"],    tf.int32), [ques_limit, char_limit])
+        cand_char_idxs =    tf.reshape(tf.decode_raw(features["cand_char_idxs"],    tf.int32), [cand_limit, char_limit])
+        cand_label =        tf.reshape(tf.decode_raw(features["cand_label"],        tf.float32), [cand_limit])
+        y1 =                tf.reshape(tf.decode_raw(features["y1"],                tf.float32), [para_limit])
+        y2 =                tf.reshape(tf.decode_raw(features["y2"],                tf.float32), [para_limit])
+        qa_id =             features["id"]
+
+        return context_idxs, ques_idxs, cand_idxs, \
+               context_char_idxs, ques_char_idxs, cand_char_idxs, \
+               cand_label, y1, y2, qa_id
     return parse
 
 
@@ -49,7 +60,7 @@ def get_batch_dataset(record_file, parser, config):
              the final batch contain smaller tensors with shape N % batch_size in the batch dimension. 
              If your program needs batches having the same shape, use tf.contrib.data.batch_and_drop_remainder
         tf.data.TFRecordDataset.repeat(): Repeats this dataset count times. None or -1: repeated indefinitely
-        tf.data.TFRecordDataset.apply():Apply a transformation function to this dataset.
+        tf.data.TFRecordDataset.apply(): Apply a transformation function to this dataset.
         tf.data.TFRecordDataset.shuffle()--buffer_size: A tf.int64 scalar tf.Tensor, 
             representing the number of elements from this dataset from which the new dataset will sample. 
             (see https://stackoverflow.com/questions/46444018/
@@ -57,12 +68,14 @@ def get_batch_dataset(record_file, parser, config):
         tf.clip_by_value: Clips tensor values to a specified min and max.
         tf.data.Dataset.shuffle(): handle datasets that are too large to fit in memory
     '''
-    dataset = tf.data.TFRecordDataset(record_file).map(
-        parser, num_parallel_calls=num_threads).shuffle(config.capacity).repeat()
+    dataset = tf.data.TFRecordDataset(record_file).map(parser, num_parallel_calls=num_threads)\
+        .shuffle(config.capacity).repeat()
     if config.is_bucket:
         buckets = [tf.constant(num) for num in range(*config.bucket_range)]
 
-        def key_func(context_idxs, ques_idxs, context_char_idxs, ques_char_idxs, y1, y2, qa_id):
+        def key_func(context_idxs, ques_idxs, cand_idxs,
+                     context_char_idxs, ques_char_idxs, cand_char_idxs,
+                     cand_label, y1, y2, qa_id):
             c_len = tf.reduce_sum(tf.cast(tf.cast(context_idxs, tf.bool), tf.int32))
             t = tf.clip_by_value(buckets, 0, c_len)
             return tf.argmax(t)
@@ -110,6 +123,17 @@ def evaluate(eval_file, answer_dict):
     f1 = 100.0 * f1 / total
     return {'exact_match': exact_match, 'f1': f1}
 
+def evaluate_cand(eval_file, pred):
+    f1 = exact_match = total = 0
+    for key, value in answer_dict.items():
+        total += 1
+        ground_truths = eval_file[key]["answers"]
+        prediction = value
+        exact_match += metric_max_over_ground_truths(exact_match_score, prediction, ground_truths)
+        f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
+    exact_match = 100.0 * exact_match / total
+    f1 = 100.0 * f1 / total
+    return {'exact_match': exact_match, 'f1': f1}
 
 def normalize_answer(s):
 

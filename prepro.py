@@ -6,7 +6,7 @@ import ujson as json
 from collections import Counter
 import numpy as np
 from codecs import open
-import sys
+import sys, os, time
 
 '''
 This file is taken and modified from R-Net by HKUST-KnowComp
@@ -14,142 +14,6 @@ https://github.com/HKUST-KnowComp/R-Net
 '''
 
 nlp = spacy.blank("en")
-
-
-def word_tokenize(sent):
-    doc = nlp(sent)
-    return [token.text for token in doc]
-
-
-def convert_idx(text, tokens):
-    current = 0
-    spans = []
-    for token in tokens:
-        current = text.find(token, current)
-        if current < 0:
-            print("Token {} cannot be found".format(token))
-            raise Exception()
-        spans.append((current, current + len(token)))
-        current += len(token)
-    return spans
-
-
-# def process_file(filename, data_type, word_counter, char_counter):
-def process_file(config, filename, data_type, word_counter, char_counter, is_test=False):
-
-    para_limit = config.test_para_limit if is_test else config.para_limit
-    ques_limit = config.test_ques_limit if is_test else config.ques_limit
-
-    print("Generating {} examples...".format(data_type))
-    examples = []
-    eval_examples = {}
-    total = 0
-    with open(filename, "r") as fh:
-        source = json.load(fh)
-        for article in tqdm(source["data"]):
-            for para in article["paragraphs"]:
-                context = para["context"].replace("''", '" ').replace("``", '" ')
-                context_tokens = word_tokenize(context)
-
-                # discard tokens longer than limit
-                if len(context_tokens) > para_limit:
-                    context_tokens = context_tokens[:para_limit]
-
-                context_chars = [list(token) for token in context_tokens]
-                spans = convert_idx(context, context_tokens)
-                max_span = spans[-1][1]
-
-                for token in context_tokens:
-                    word_counter[token] += len(para["qas"])
-                    for char in token:
-                        char_counter[char] += len(para["qas"])
-                for qa in para["qas"]:
-                    ques = qa["question"].replace("''", '" ').replace("``", '" ')
-                    ques_tokens = word_tokenize(ques)
-
-                    # discard tokens longer than limit
-                    if len(ques_tokens) > ques_limit: ques_tokens = ques_tokens[:ques_limit]
-
-                    ques_chars = [list(token) for token in ques_tokens]
-                    for token in ques_tokens:
-                        word_counter[token] += 1
-                        for char in token:
-                            char_counter[char] += 1
-                    y1s, y2s = [], []
-                    answer_texts = []
-                    for answer in qa["answers"]:
-                        answer_text = answer["text"]
-                        answer_start = answer['answer_start']
-                        answer_end = answer_start + len(answer_text)
-
-                        # TODO: predict answer for dev/test samples even without answer span !!!
-                        # discard answers not within #para_limit words
-                        if answer_start > max_span or answer_end > max_span: continue
-
-                        answer_texts.append(answer_text)
-                        answer_span = []
-                        for idx, span in enumerate(spans):
-                            if not (answer_end <= span[0] or answer_start >= span[1]):
-                                answer_span.append(idx)
-                        y1, y2 = answer_span[0], answer_span[-1]
-                        y1s.append(y1)
-                        y2s.append(y2)
-
-                    # TODO: predict answer for dev/test samples even without answer span !!!
-                    # include sample only if answer exists
-                    if answer_texts and y1s and y2s:
-                        total += 1 # only increment counter if example is included
-                        example = {"context_tokens": context_tokens, "context_chars": context_chars,
-                                   "ques_tokens": ques_tokens,"ques_chars": ques_chars,
-                                   "y1s": y1s, "y2s": y2s, "id": total}
-                        examples.append(example)
-
-                        # context is still complete but spans and context_tokens etc are clipped
-                        eval_examples[str(total)] = {"context": context, "spans": spans,
-                                                 "answers": answer_texts, "uuid": qa["id"]}
-        random.shuffle(examples)
-        print("{} questions in total".format(len(examples)))
-
-    return examples, eval_examples
-
-
-def get_embedding(counter, data_type, limit=-1, emb_file=None, size=None, vec_size=None):
-    print("Generating {} embedding...".format(data_type))
-    embedding_dict = {}
-    filtered_elements = [k for k, v in counter.items() if v > limit]
-    if emb_file is not None:
-        assert size is not None
-        assert vec_size is not None
-        with open(emb_file, "r", encoding="utf-8") as fin:
-            for line in tqdm(fin, total=size):
-                array = line.split()
-                word = "".join(array[0:-vec_size])
-                vector = list(map(float, array[-vec_size:]))
-                if word in counter and counter[word] > limit:
-                    embedding_dict[word] = vector
-        print("{} / {} tokens have {} embeddings".format(len(embedding_dict), len(filtered_elements), data_type))
-    else:
-        assert vec_size is not None
-        for token in filtered_elements:
-            embedding_dict[token] = [np.random.normal(scale=0.1) for _ in range(vec_size)]
-        print("{} tokens have embedding".format(len(filtered_elements)))
-
-    NULL = "--NULL--"
-    OOV = "--OOV--"
-    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys(), 2)} # start the index from 2
-    token2idx_dict[NULL] = 0
-    token2idx_dict[OOV] = 1
-    '''
-        embedding_dict = {token:emb}
-        token2idx_dict = {token:idx}
-        idx2emb_dict   = {idx:emb}
-        emb_mat = [emb] 
-    '''
-    embedding_dict[NULL] = [0. for _ in range(vec_size)]
-    embedding_dict[OOV] = [0. for _ in range(vec_size)]
-    idx2emb_dict = {idx: embedding_dict[token] for token, idx in token2idx_dict.items()}
-    emb_mat = [idx2emb_dict[idx] for idx in range(len(idx2emb_dict))]
-    return emb_mat, token2idx_dict
 
 def convert_to_features(config, data, word2idx_dict, char2idx_dict):
 
@@ -212,6 +76,148 @@ def convert_to_features(config, data, word2idx_dict, char2idx_dict):
 
     return context_idxs, context_char_idxs, ques_idxs, ques_char_idxs
 
+
+def word_tokenize(sent):
+    doc = nlp(sent)
+    return [token.text for token in doc]
+
+
+def convert_idx(text, tokens):
+    current = 0
+    spans = []
+    for token in tokens:
+        current = text.find(token, current)
+        if current < 0:
+            print("Token {} cannot be found".format(token))
+            raise Exception()
+        spans.append((current, current + len(token)))
+        current += len(token)
+    return spans
+
+
+# def process_file(filename, data_type, word_counter, char_counter):
+def process_file(config, filename, data_type, word_counter, char_counter, is_test=False):
+
+    para_limit = config.test_para_limit if is_test else config.para_limit
+    ques_limit = config.test_ques_limit if is_test else config.ques_limit
+
+    print("Generating {} examples...".format(data_type))
+    examples = []
+    eval_examples = {}
+    total = 0
+    with open(filename, "r") as fh:
+        source = json.load(fh)
+        for article in tqdm(source["data"]):
+            for para in article["paragraphs"]:
+                context = para["context"].replace("''", '" ').replace("``", '" ')
+                context_tokens = word_tokenize(context)
+
+                # discard tokens longer than limit
+                if len(context_tokens) > para_limit:
+                    context_tokens = context_tokens[:para_limit]
+
+                context_chars = [list(token) for token in context_tokens]
+                spans = convert_idx(context, context_tokens)
+                max_span = spans[-1][1]
+
+                for token in context_tokens:
+                    word_counter[token] += len(para["qas"])
+                    for char in token:
+                        char_counter[char] += len(para["qas"])
+                for qa in para["qas"]:
+                    ques = qa["question"].replace("''", '" ').replace("``", '" ')
+                    ques_tokens = word_tokenize(ques)
+
+                    # discard tokens longer than limit
+                    if len(ques_tokens) > ques_limit: ques_tokens = ques_tokens[:ques_limit]
+
+                    ques_chars = [list(token) for token in ques_tokens]
+                    for token in ques_tokens:
+                        word_counter[token] += 1
+                        for char in token:
+                            char_counter[char] += 1
+
+                    y1s, y2s, answer_texts = [], [], []
+                    candidates, answer_position, cand_chars= None, None, None
+                    for answer in qa["answers"]:
+                        answer_text = answer["text"]
+                        # answer_text = ' '.join(word_tokenize(answer_text))
+                        answer_start = answer["answer_start"]
+                        answer_end = answer_start + len(answer_text)
+
+                        # discard answers not within #para_limit words
+                        if answer_start > max_span or answer_end > max_span: continue
+
+                        answer_texts.append(answer_text)
+                        answer_span = []
+                        for idx, span in enumerate(spans):
+                            if not (answer_end <= span[0] or answer_start >= span[1]):
+                                answer_span.append(idx)
+                        y1, y2 = answer_span[0], answer_span[-1]
+                        y1s.append(y1)
+                        y2s.append(y2)
+
+                        candidates = answer["candidates"]
+                        candidates = [' '.join(word_tokenize(x)) for x in candidates]
+                        cand_chars = [list(token) for token in candidates]
+                        answer_position = answer["answer_position"]
+
+                    # include sample only if answer exists
+                    if answer_texts and y1s and y2s:
+                        total += 1 # only increment counter if example is included
+                        example = {"context_tokens": context_tokens, "context_chars": context_chars,
+                                   "ques_tokens": ques_tokens,"ques_chars": ques_chars, "y1s": y1s, "y2s": y2s,
+                                   "candidates": candidates, "cand_chars": cand_chars,
+                                   "answer_position": answer_position, "id": total}
+                        examples.append(example)
+
+                        # context is still complete but spans and context_tokens etc are clipped
+                        eval_examples[str(total)] = {"context": context, "spans": spans,
+                                                 "answers": answer_texts, "uuid": qa["id"]}
+        random.shuffle(examples)
+        print("{} questions in total".format(len(examples)))
+
+    return examples, eval_examples
+
+
+def get_embedding(counter, data_type, limit=-1, emb_file=None, size=None, vec_size=None):
+    print("Generating {} embedding...".format(data_type))
+    embedding_dict = {}
+    filtered_elements = [k for k, v in counter.items() if v > limit]
+    if emb_file is not None:
+        assert size is not None
+        assert vec_size is not None
+        with open(emb_file, "r", encoding="utf-8") as fin:
+            for line in tqdm(fin, total=size):
+                array = line.split()
+                word = "".join(array[0:-vec_size])
+                vector = list(map(float, array[-vec_size:]))
+                if word in counter and counter[word] > limit:
+                    embedding_dict[word] = vector
+        print("{} / {} tokens have {} embeddings".format(len(embedding_dict), len(filtered_elements), data_type))
+    else:
+        assert vec_size is not None
+        for token in filtered_elements:
+            embedding_dict[token] = [np.random.normal(scale=0.1) for _ in range(vec_size)]
+        print("{} tokens have embedding".format(len(filtered_elements)))
+
+    NULL = "--NULL--"
+    OOV = "--OOV--"
+    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys(), 2)} # start the index from 2
+    token2idx_dict[NULL] = 0
+    token2idx_dict[OOV] = 1
+    '''
+        embedding_dict = {token:emb}
+        token2idx_dict = {token:idx}
+        idx2emb_dict   = {idx:emb}
+        emb_mat = [emb] 
+    '''
+    embedding_dict[NULL] = [0. for _ in range(vec_size)]
+    embedding_dict[OOV] = [0. for _ in range(vec_size)]
+    idx2emb_dict = {idx: embedding_dict[token] for token, idx in token2idx_dict.items()}
+    emb_mat = [idx2emb_dict[idx] for idx in range(len(idx2emb_dict))]
+    return emb_mat, token2idx_dict
+
 def build_features(config, examples, data_type, out_file, word2idx_dict, char2idx_dict, is_test=False):
 
     """
@@ -220,6 +226,7 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
 
     para_limit = config.test_para_limit if is_test else config.para_limit
     ques_limit = config.test_ques_limit if is_test else config.ques_limit
+    cand_limit = config.cand_limit
 
     #TODO: change hard-coded number to config parameter
     ans_limit = 100 if is_test else config.ans_limit
@@ -238,8 +245,9 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
     for example in tqdm(examples):
         '''
             example = {"context_tokens": context_tokens, "context_chars": context_chars,
-               "ques_tokens": ques_tokens,"ques_chars": ques_chars,
-               "y1s": y1s, "y2s": y2s, "id": total}
+                                   "ques_tokens": ques_tokens,"ques_chars": ques_chars,
+                                   "y1s": y1s, "y2s": y2s, "candidates": candidates,
+                                   "answer_position": answer_position, "id": total}
         '''
         total_ += 1
 
@@ -251,6 +259,9 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         context_char_idxs = np.zeros([para_limit, char_limit], dtype=np.int32)
         ques_idxs = np.zeros([ques_limit], dtype=np.int32)
         ques_char_idxs = np.zeros([ques_limit, char_limit], dtype=np.int32)
+        cand_idxs = np.zeros([cand_limit], dtype=np.int32)
+        cand_label = np.zeros([cand_limit], dtype=np.float32)
+        cand_char_idxs = np.zeros([cand_limit, char_limit], dtype=np.int32)
         y1 = np.zeros([para_limit], dtype=np.float32)
         y2 = np.zeros([para_limit], dtype=np.float32)
 
@@ -271,6 +282,9 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         for i, token in enumerate(example["ques_tokens"]):
             ques_idxs[i] = _get_word_idx(token)
 
+        for i, token in enumerate(example["candidates"]):
+            cand_idxs[i] = _get_word_idx(token)
+
         for i, token in enumerate(example["context_chars"]):
             for j, char in enumerate(token):
                 if j == char_limit:
@@ -283,8 +297,15 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
                     break
                 ques_char_idxs[i, j] = _get_char_idx(char)
 
+        for i, token in enumerate(example["cand_chars"]):
+            for j, char in enumerate(token):
+                if j == char_limit:
+                    break
+                cand_char_idxs[i, j] = _get_char_idx(char)
+
         start, end = example["y1s"][-1], example["y2s"][-1]
         y1[start], y2[end] = 1.0, 1.0
+        cand_label[example["answer_position"]] = 1.0
 
         '''
             tf.train.Example is not a Python class, but a protocol buffer for structuring a TFRecord. 
@@ -295,19 +316,21 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
             tf.train.Feature wraps a list of data of a specific type: tf.train.BytesList (attribute name bytes_list),
                 tf.train.FloatList (attribute name float_list), or tf.train.Int64List (attribute name int64_list).
             
-             tf.python_io.TFRecordWriter.write() accepts a string as parameter and writes it to disk, 
+            tf.python_io.TFRecordWriter.write() accepts a string as parameter and writes it to disk, 
                 meaning that structured data must be serialized first --> tf.train.Example.SerializeToString()
         '''
 
         record = tf.train.Example(features=tf.train.Features(feature={
-            "context_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[context_idxs.tostring()])),
-            "ques_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_idxs.tostring()])),
-            "context_char_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(
-                value=[context_char_idxs.tostring()])),
-            "ques_char_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_char_idxs.tostring()])),
-            "y1": tf.train.Feature(bytes_list=tf.train.BytesList(value=[y1.tostring()])),
-            "y2": tf.train.Feature(bytes_list=tf.train.BytesList(value=[y2.tostring()])),
-            "id": tf.train.Feature(int64_list=tf.train.Int64List(value=[example["id"]]))}))
+            "context_idxs":      tf.train.Feature(bytes_list=tf.train.BytesList(value=[context_idxs.tostring()])),
+            "ques_idxs":         tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_idxs.tostring()])),
+            "cand_idxs":         tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_idxs.tostring()])),
+            "context_char_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[context_char_idxs.tostring()])),
+            "ques_char_idxs":    tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_char_idxs.tostring()])),
+            "cand_char_idxs":    tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_char_idxs.tostring()])),
+            "cand_label":        tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_label.tostring()])),
+            "y1":                tf.train.Feature(bytes_list=tf.train.BytesList(value=[y1.tostring()])),
+            "y2":                tf.train.Feature(bytes_list=tf.train.BytesList(value=[y2.tostring()])),
+            "id":                tf.train.Feature(int64_list=tf.train.Int64List(value=[example["id"]]))}))
 
         writer.write(record.SerializeToString())
     print("Built {} / {} instances of features in total".format(total, total_))
@@ -339,15 +362,27 @@ def prepro(config):
     char_emb_size = config.glove_char_size if config.pretrained_char else None
     char_emb_dim = config.glove_dim if config.pretrained_char else config.char_dim
 
-    word_emb_mat, word2idx_dict = get_embedding(word_counter, "word", emb_file=word_emb_file,
-                                                size=config.glove_word_size, vec_size=config.glove_dim)
-    save(config.word_emb_file, word_emb_mat, message="word embedding")
-    save(config.word_dictionary, word2idx_dict, message="word dictionary")
+    if os.path.isfile(config.word_emb_file) and os.path.isfile(config.word_dictionary):
+        print("word embedding pre-processed files exist, loading...")
+        with open(config.word_emb_file, "r") as fw, open(config.word_dictionary, "r") as fd:
+            word_emb_mat = json.load(fw)
+            word2idx_dict = json.load(fd)
+    else:
+        word_emb_mat, word2idx_dict = get_embedding(word_counter, "word", emb_file=word_emb_file,
+                                                    size=config.glove_word_size, vec_size=config.glove_dim)
+        save(config.word_emb_file, word_emb_mat, message="word embedding")
+        save(config.word_dictionary, word2idx_dict, message="word dictionary")
 
-    char_emb_mat, char2idx_dict = get_embedding(char_counter, "char", emb_file=char_emb_file,
-                                                size=char_emb_size, vec_size=char_emb_dim)
-    save(config.char_emb_file, char_emb_mat, message="char embedding")
-    save(config.char_dictionary, char2idx_dict, message="char dictionary")
+    if os.path.isfile(config.char_emb_file) and os.path.isfile(config.char_dictionary):
+        print("char embedding pre-processed files exist, loading...")
+        with open(config.char_emb_file, "r") as fc, open(config.char_dictionary, "r") as fd:
+            char_emb_mat = json.load(fc)
+            char2idx_dict = json.load(fd)
+    else:
+        char_emb_mat, char2idx_dict = get_embedding(char_counter, "char", emb_file=char_emb_file,
+                                                    size=char_emb_size, vec_size=char_emb_dim)
+        save(config.char_emb_file, char_emb_mat, message="char embedding")
+        save(config.char_dictionary, char2idx_dict, message="char dictionary")
 
     # build_features
     build_features(config, train_examples, "train", config.train_record_file, word2idx_dict, char2idx_dict)

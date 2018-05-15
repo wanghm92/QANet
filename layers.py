@@ -194,6 +194,8 @@ def conv(inputs, output_size, bias = None, activation = None, kernel_size = 1, n
             filter_shape = [kernel_size,shapes[-1],output_size]
             bias_shape = [1,1,output_size]
             strides = 1
+
+        # same as a MLP layer when kernel_size = 1, dim = shapes[-1] x output_size
         conv_func = tf.nn.conv1d if len(shapes) == 3 else tf.nn.conv2d
         kernel_ = tf.get_variable("kernel_",
                         filter_shape,

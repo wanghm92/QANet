@@ -111,19 +111,24 @@ def convert_tokens(eval_file, qa_id, pp1, pp2):
     return answer_dict, remapped_dict
 
 
-def evaluate(eval_file, answer_dict):
-    f1 = exact_match = total = 0
-    for key, value in answer_dict.items():
-        total += 1
-        ground_truths = eval_file[key]["answers"]
-        prediction = value
-        exact_match += metric_max_over_ground_truths(exact_match_score, prediction, ground_truths)
-        f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
-    exact_match = 100.0 * exact_match / total
-    f1 = 100.0 * f1 / total
-    return {'exact_match': exact_match, 'f1': f1}
+def convert_tokens_cand(eval_file, qa_id, pred, gold):
+    answer_dict = {}
+    for qid, p, g in zip(qa_id, pred, gold):
+        # context = eval_file[str(qid)]["context"]
+        # spans = eval_file[str(qid)]["spans"]
+        # uuid = eval_file[str(qid)]["uuid"]
+        candidates = eval_file[str(qid)]["candidates"]
+        gold_cand = candidates[g]
+        pred_cand = candidates[p]
+        answer = eval_file[str(qid)]["answers"]
+        # start_idx = spans[p1][0]
+        # end_idx = spans[p2][1]
+        # answer_dict[str(qid)] = context[start_idx: end_idx]
+        # remapped_dict[uuid] = context[start_idx: end_idx]
+        answer_dict[str(qid)] = (gold_cand, pred_cand, answer)
+    return answer_dict
 
-def evaluate_cand(eval_file, pred):
+def evaluate(eval_file, answer_dict):
     f1 = exact_match = total = 0
     for key, value in answer_dict.items():
         total += 1

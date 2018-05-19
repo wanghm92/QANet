@@ -319,14 +319,14 @@ class Model(object):
             S_xc_ = tf.nn.softmax(mask_logits(S_xc, mask = mask_x))
 
             x2c = tf.matmul(S_xc_, c_proj)
-            xplusc = tf.concat([x_emb, x2c], axis=-1)
-            cand_logits = tf.squeeze(conv(xplusc, 1, bias=False, name="candidate_logits"), -1)
+            # xplusc = tf.concat([x_emb, x2c], axis=-1)
+            cand_logits = tf.squeeze(conv(x2c, 1, bias=False, name="candidate_logits"), -1)
             self.cand_logits = mask_logits(cand_logits, mask=self.x_mask)
             loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.cand_logits, labels=self.yx)
             self.loss = tf.reduce_mean(loss)
 
             # DEBUG
-            self.debug_ops.extend([loss, x_emb, c_proj, S_xc, S_xc_, x2c, xplusc, cand_logits,
+            self.debug_ops.extend([loss, x_emb, c_proj, S_xc, S_xc_, x2c, cand_logits,
                                    self.x_mask, self.cand_logits, self.yx])
 
         # with tf.variable_scope("Output_Layer"):

@@ -11,7 +11,9 @@ https://github.com/HKUST-KnowComp/R-Net
 
 from model import Model
 from demo import Demo
-from util import get_record_parser, convert_tokens, evaluate, get_batch_dataset, get_dataset, evaluate_cand
+from util import get_record_parser, convert_tokens, evaluate, get_batch_dataset, get_dataset, evaluate_cand, \
+    convert_tokens_cand
+
 
 def train(config):
     with open(config.word_emb_file, "r") as fh:
@@ -225,17 +227,27 @@ def test(config):
             if config.decay < 1.0:
                 sess.run(model.assign_vars)
             losses = []
+            pred = []
+            gold = []
             answer_dict = {}
+            metrics = {}
             remapped_dict = {}
             for step in tqdm(range(total // config.batch_size + 1)):
-                qa_id, loss, yp1, yp2 = sess.run([model.qa_id, model.loss, model.yp1, model.yp2])
-                answer_dict_, remapped_dict_ = convert_tokens(eval_file, qa_id.tolist(), yp1.tolist(), yp2.tolist())
+                qa_id, loss, logits, yx = sess.run([model.qa_id, model.loss, model.cand_logits, model.yx])
+                pred_idx = np.argmax(logits, axis=1)
+                pred.extend(pred_idx)
+                gold_idx = np.argmax(yx, axis=1)
+                gold.extend(gold_idx)
+                answer_dict_ = convert_tokens_cand(eval_file, qa_id.tolist(), pred_idx.tolist(), gold_idx.tolist())
+
                 answer_dict.update(answer_dict_)
-                remapped_dict.update(remapped_dict_)
                 losses.append(loss)
             loss = np.mean(losses)
-            metrics = evaluate(eval_file, answer_dict)
+            correct = [i for i, j in zip(gold, pred) if i == j]
+            acc = 100.0 * len(correct) / len(gold)
+            metrics["loss"] = loss
+            metrics["acc"] = acc
+            # metrics = evaluate(eval_file, answer_dict)
             with open(config.answer_file, "w") as fh:
-                json.dump(remapped_dict, fh)
-            print("Exact Match: {}, F1: {}".format(
-                metrics['exact_match'], metrics['f1']))
+                json.dump(answer_dict, fh)
+            print("Loss: {}, Accuracy: {}".format(metrics['loss'], metrics['acc']))

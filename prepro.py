@@ -172,7 +172,7 @@ def process_file(config, filename, data_type, word_counter, char_counter, is_tes
                         examples.append(example)
 
                         # context is still complete but spans and context_tokens etc are clipped
-                        eval_examples[str(total)] = {"context": context, "spans": spans,
+                        eval_examples[str(total)] = {"context": context, "spans": spans, "candidates": candidates,
                                                  "answers": answer_texts, "uuid": qa["id"]}
         random.shuffle(examples)
         print("{} questions in total".format(len(examples)))

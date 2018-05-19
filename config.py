@@ -22,7 +22,7 @@ test_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.s
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 out_dir = "output"
-model_name = "mhrc_qplusa_with_cand"
+model_name = "mhrc_qplusa_with_cand_noconcat"
 # model_name = "mhrc_qplusa_clipped"
 model_out_path = os.path.join(out_dir, model_name)
 if not os.path.exists(out_dir):
@@ -106,7 +106,7 @@ flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
 
 # TODO: 12 is better
 flags.DEFINE_integer("batch_size", 32, "Batch size")
-flags.DEFINE_integer("num_steps", 120000, "Number of steps")
+flags.DEFINE_integer("num_steps", 200000, "Number of steps")
 flags.DEFINE_integer("checkpoint", 1000, "checkpoint to save and evaluate the model")
 flags.DEFINE_integer("period", 100, "period to save batch loss")
 flags.DEFINE_integer("val_num_batches", 100, "Number of train batches to evaluate the model")

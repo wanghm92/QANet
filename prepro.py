@@ -112,7 +112,7 @@ def process_file(config, filename, data_type, word_counter, char_counter, is_tes
                 context = para["context"].replace("''", '" ').replace("``", '" ')
                 context_tokens = word_tokenize(context)
 
-                # discard tokens longer than limit
+                # discard context tokens longer than para_limit
                 if len(context_tokens) > para_limit:
                     context_tokens = context_tokens[:para_limit]
 
@@ -128,7 +128,7 @@ def process_file(config, filename, data_type, word_counter, char_counter, is_tes
                     ques = qa["question"].replace("''", '" ').replace("``", '" ')
                     ques_tokens = word_tokenize(ques)
 
-                    # discard tokens longer than limit
+                    # discard query tokens longer than ques_limit
                     if len(ques_tokens) > ques_limit: ques_tokens = ques_tokens[:ques_limit]
 
                     ques_chars = [list(token) for token in ques_tokens]
@@ -145,35 +145,36 @@ def process_file(config, filename, data_type, word_counter, char_counter, is_tes
                         answer_start = answer["answer_start"]
                         answer_end = answer_start + len(answer_text)
 
-                        # discard answers not within #para_limit words
-                        if answer_start > max_span or answer_end > max_span: continue
-
-                        answer_texts.append(answer_text)
-                        answer_span = []
-                        for idx, span in enumerate(spans):
-                            if not (answer_end <= span[0] or answer_start >= span[1]):
-                                answer_span.append(idx)
-                        y1, y2 = answer_span[0], answer_span[-1]
-                        y1s.append(y1)
-                        y2s.append(y2)
-
                         candidates = answer["candidates"]
                         candidates = [' '.join(word_tokenize(x)) for x in candidates]
                         cand_chars = [list(token) for token in candidates]
                         answer_position = answer["answer_position"]
+                        answer_texts.append(answer_text)
+
+                        # if answers not within #para_limit words, y1 and y2 should be empty, however it does not
+                        # matter if simply selecting answer from the candidate list
+                        if answer_start <= max_span and answer_end <= max_span:
+                            answer_span = []
+                            for idx, span in enumerate(spans):
+                                if not (answer_end <= span[0] or answer_start >= span[1]):
+                                    answer_span.append(idx)
+                            y1, y2 = answer_span[0], answer_span[-1]
+                            y1s.append(y1)
+                            y2s.append(y2)
 
                     # include sample only if answer exists
-                    if answer_texts and y1s and y2s:
-                        total += 1 # only increment counter if example is included
-                        example = {"context_tokens": context_tokens, "context_chars": context_chars,
-                                   "ques_tokens": ques_tokens,"ques_chars": ques_chars, "y1s": y1s, "y2s": y2s,
-                                   "candidates": candidates, "cand_chars": cand_chars,
-                                   "answer_position": answer_position, "id": total}
-                        examples.append(example)
+                    # if answer_texts and y1s and y2s:
+                    # total += 1 # only increment counter if example is included
+                    total += 1
+                    example = {"context_tokens": context_tokens, "context_chars": context_chars,
+                               "ques_tokens": ques_tokens,"ques_chars": ques_chars, "y1s": y1s, "y2s": y2s,
+                               "candidates": candidates, "cand_chars": cand_chars,
+                               "answer_position": answer_position, "id": total}
+                    examples.append(example)
 
-                        # context is still complete but spans and context_tokens etc are clipped
-                        eval_examples[str(total)] = {"context": context, "spans": spans, "candidates": candidates,
-                                                 "answers": answer_texts, "uuid": qa["id"]}
+                    # context is still complete but spans and context_tokens etc are clipped
+                    eval_examples[str(total)] = {"context": context, "spans": spans, "candidates": candidates,
+                                             "answers": answer_texts, "uuid": qa["id"]}
         random.shuffle(examples)
         print("{} questions in total".format(len(examples)))
 
@@ -303,8 +304,14 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
                     break
                 cand_char_idxs[i, j] = _get_char_idx(char)
 
-        start, end = example["y1s"][-1], example["y2s"][-1]
-        y1[start], y2[end] = 1.0, 1.0
+        if len(example["y1s"]) > 0:
+            start = example["y1s"][-1]
+            y1[start] = 1.0
+
+        if len(example["y2s"]) > 0:
+            end = example["y2s"][-1]
+            y2[end] = 1.0
+
         cand_label[example["answer_position"]] = 1.0
 
         '''
@@ -324,7 +331,8 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
             "context_idxs":      tf.train.Feature(bytes_list=tf.train.BytesList(value=[context_idxs.tostring()])),
             "ques_idxs":         tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_idxs.tostring()])),
             "cand_idxs":         tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_idxs.tostring()])),
-            "context_char_idxs": tf.train.Feature(bytes_list=tf.train.BytesList(value=[context_char_idxs.tostring()])),
+            "context_char_idxs": tf.train.Feature(
+                bytes_list=tf.train.BytesList(value=[context_char_idxs.tostring()])),
             "ques_char_idxs":    tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_char_idxs.tostring()])),
             "cand_char_idxs":    tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_char_idxs.tostring()])),
             "cand_label":        tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_label.tostring()])),
@@ -348,9 +356,11 @@ def save(filename, obj, message=None):
 
 def prepro(config):
     word_counter, char_counter = Counter(), Counter()
+
     # process_file
     train_examples, train_eval = process_file(config, config.train_file, "train", word_counter, char_counter)
     save(config.train_eval_file, train_eval, message="train eval")
+
     dev_examples, dev_eval = process_file(config, config.dev_file, "dev", word_counter, char_counter, is_test=True)
     save(config.dev_eval_file, dev_eval, message="dev eval")
     test_examples, test_eval = process_file(config, config.test_file, "test", word_counter, char_counter, is_test=True)
@@ -385,11 +395,13 @@ def prepro(config):
         save(config.char_dictionary, char2idx_dict, message="char dictionary")
 
     # build_features
+    # train
     build_features(config, train_examples, "train", config.train_record_file, word2idx_dict, char2idx_dict)
+    # dev
     dev_meta = build_features(config, dev_examples, "dev", config.dev_record_file, word2idx_dict, char2idx_dict,
                               is_test=True)
     save(config.dev_meta, dev_meta, message="dev meta")
-
+    # test
     test_meta = build_features(config, test_examples, "test", config.test_record_file, word2idx_dict, char2idx_dict,
                                is_test=True)
     save(config.test_meta, test_meta, message="test meta")

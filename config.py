@@ -17,12 +17,12 @@ mhrc = os.path.abspath("../")
 # dev_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
 # test_file = os.path.join(mhrc, "data", "qangaroo_qplusa", "wikihop.dev.cand.squad.json")
 train_file = os.path.join(mhrc, "data", "with_cand", "wikihop.train.qplusa.withcand.squad.json")
-dev_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.squad.json")
-test_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.squad.json")
+dev_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.squad.new.json")
+test_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.squad.new.json")
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 out_dir = "output"
-model_name = "mhrc_qplusa_with_cand_noconcat"
+model_name = "mhrc_qplusa_with_cand_new"
 # model_name = "mhrc_qplusa_clipped"
 model_out_path = os.path.join(out_dir, model_name)
 if not os.path.exists(out_dir):
@@ -30,8 +30,8 @@ if not os.path.exists(out_dir):
 if not os.path.exists(os.path.join(os.getcwd(),model_out_path)):
     os.mkdir(os.path.join(os.getcwd(),model_out_path))
     
-prepro_out = "mhrc_qplusa_with_cand_prepro"
-# prepro_out = "mhrc_qplusa_clipped_prepro"
+prepro_out = "mhrc_qplusa_with_cand_prepro_new"
+# prepro_out = "temp"
 log_dir = os.path.join(model_out_path, "event")
 save_dir = os.path.join(model_out_path, "model")
 answer_dir = os.path.join(model_out_path, "answer")
@@ -104,9 +104,8 @@ flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
 flags.DEFINE_boolean("is_bucket", True, "build bucket batch iterator or not")
 flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
 
-# TODO: 12 is better
 flags.DEFINE_integer("batch_size", 32, "Batch size")
-flags.DEFINE_integer("num_steps", 200000, "Number of steps")
+flags.DEFINE_integer("num_steps", 250000, "Number of steps")
 flags.DEFINE_integer("checkpoint", 1000, "checkpoint to save and evaluate the model")
 flags.DEFINE_integer("period", 100, "period to save batch loss")
 flags.DEFINE_integer("val_num_batches", 100, "Number of train batches to evaluate the model")

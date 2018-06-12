@@ -224,6 +224,28 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
     """
         Converting tokens to np.arrays of indices
     """
+    def get_cand_position(candidates, context_tokens):
+        cand_positions = np.zeros([cand_limit, para_limit], dtype=np.float32)
+
+        context = ' '.join(context_tokens)
+        for i, token in enumerate(candidates):
+            token = token+' '
+            char_start = context.find(token)
+            if start > -1:
+                l = len(token.split())
+                pretext = context[:char_start].strip()
+                token_start = len(pretext.split())
+                for j in range(token_start, token_start+l):
+                    if j < para_limit:
+                        cand_positions[i][j] = 1.0
+        # DEBUG
+        # for i, (_, c) in enumerate(zip(cand_positions, candidates)):
+        #     print c
+        #     for j, t in enumerate(cand_positions[i]):
+        #         if cand_positions[i][j] > 0:
+        #             print context_tokens[j]
+
+        return cand_positions
 
     para_limit = config.test_para_limit if is_test else config.para_limit
     ques_limit = config.test_ques_limit if is_test else config.ques_limit
@@ -252,7 +274,7 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         '''
         total_ += 1
 
-        # TODO: NOTHING
+        # TODO: comment this out as we do not need filtering
         # if filter_func(example, is_test): continue
 
         total += 1
@@ -261,8 +283,8 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         ques_idxs = np.zeros([ques_limit], dtype=np.int32)
         ques_char_idxs = np.zeros([ques_limit, char_limit], dtype=np.int32)
         cand_idxs = np.zeros([cand_limit], dtype=np.int32)
-        cand_label = np.zeros([cand_limit], dtype=np.float32)
         cand_char_idxs = np.zeros([cand_limit, char_limit], dtype=np.int32)
+        cand_label = np.zeros([cand_limit], dtype=np.float32)
         y1 = np.zeros([para_limit], dtype=np.float32)
         y2 = np.zeros([para_limit], dtype=np.float32)
 
@@ -313,6 +335,7 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
             y2[end] = 1.0
 
         cand_label[example["answer_position"]] = 1.0
+        cand_positions = get_cand_position(example["candidates"], example["context_tokens"])
 
         '''
             tf.train.Example is not a Python class, but a protocol buffer for structuring a TFRecord. 
@@ -336,6 +359,7 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
             "ques_char_idxs":    tf.train.Feature(bytes_list=tf.train.BytesList(value=[ques_char_idxs.tostring()])),
             "cand_char_idxs":    tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_char_idxs.tostring()])),
             "cand_label":        tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_label.tostring()])),
+            "cand_positions":    tf.train.Feature(bytes_list=tf.train.BytesList(value=[cand_positions.tostring()])),
             "y1":                tf.train.Feature(bytes_list=tf.train.BytesList(value=[y1.tostring()])),
             "y2":                tf.train.Feature(bytes_list=tf.train.BytesList(value=[y2.tostring()])),
             "id":                tf.train.Feature(int64_list=tf.train.Int64List(value=[example["id"]]))}))
@@ -358,11 +382,13 @@ def prepro(config):
     word_counter, char_counter = Counter(), Counter()
 
     # process_file
+    # train
     train_examples, train_eval = process_file(config, config.train_file, "train", word_counter, char_counter)
     save(config.train_eval_file, train_eval, message="train eval")
-
+    # dev
     dev_examples, dev_eval = process_file(config, config.dev_file, "dev", word_counter, char_counter, is_test=True)
     save(config.dev_eval_file, dev_eval, message="dev eval")
+    # test
     test_examples, test_eval = process_file(config, config.test_file, "test", word_counter, char_counter, is_test=True)
     save(config.test_eval_file, test_eval, message="test eval")
 

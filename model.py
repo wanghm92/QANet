@@ -21,7 +21,7 @@ class Model(object):
                 self.q = tf.placeholder(tf.int32, [None, config.test_ques_limit], "question")
                 self.x = tf.placeholder(tf.int32, [None, config.cand_limit], "candidates")
                 self.ch = tf.placeholder(tf.int32, [None, config.test_para_limit, config.char_limit], "context_char")
-                self.qh = tf.placeholder(tf.int32, [None, config.test_ques_limit, config.char_limit], "question_char")
+                self.qh = tf.placeholder(tf.int32, [None, config.test_ques_limit, config.char_limit],"question_char")
                 self.xh = tf.placeholder(tf.int32, [None, config.cand_limit, config.char_limit], "candidate_char")
                 self.y1 = tf.placeholder(tf.int32, [None, config.test_para_limit], "answer_index1")
                 self.y2 = tf.placeholder(tf.int32, [None, config.test_para_limit], "answer_index2")
@@ -29,7 +29,7 @@ class Model(object):
                 '''
                     get_next(): Returns a nested structure of tf.Tensors representing the next element.
                     In graph mode, you should typically call this method once and use its result as the input to 
-                    another computation. A typical loop will then call tf.Session.run on the result of that computation
+                    another computation. A typical loop will call tf.Session.run on the result of that computation
                     
                     features = tf.parse_single_example(example,
                                        features={
@@ -60,9 +60,13 @@ class Model(object):
                 # batch: train_dataset iterator
                 self.c, self.q, self.x, \
                 self.ch, self.qh, self.xh, \
-                self.yx, self.y1, self.y2, self.qa_id = batch.get_next()
+                self.yx, self.xp, self.y1, self.y2, self.qa_id = batch.get_next()
 
-            self.debug_ops.extend([self.yx, self.y1])
+            if self.config.max_margin:
+                self.yx_inv = 1 - self.yx
+
+            # TODO
+
 
             self.word_mat = tf.get_variable("word_mat", initializer=tf.constant(word_mat, dtype=tf.float32),
                                             trainable=False)
@@ -88,26 +92,36 @@ class Model(object):
                     In other words, begin[i] is the offset into the 'i'th dim of input that you want to slice from.
             '''
 
+            # Memory space optimization
             if opt:
                 N = config.batch_size if not self.demo else 1
                 CL = config.char_limit
                 self.c_maxlen = tf.reduce_max(self.c_len)
                 self.q_maxlen = tf.reduce_max(self.q_len)
                 self.x_maxlen = tf.reduce_max(self.x_len)
-                self.c = tf.slice(self.c, [0, 0], [N, self.c_maxlen])                   # shape=(N, c_maxlen)
-                self.q = tf.slice(self.q, [0, 0], [N, self.q_maxlen])                   # shape=(N, q_maxlen)
-                self.x = tf.slice(self.x, [0, 0], [N, self.x_maxlen])                   # shape=(N, x_maxlen)
-                self.c_mask = tf.slice(self.c_mask, [0, 0], [N, self.c_maxlen])         # shape=(N, c_maxlen)
-                self.q_mask = tf.slice(self.q_mask, [0, 0], [N, self.q_maxlen])         # shape=(N, q_maxlen)
-                self.x_mask = tf.slice(self.x_mask, [0, 0], [N, self.x_maxlen])         # shape=(N, x_maxlen)
-                self.ch = tf.slice(self.ch, [0, 0, 0], [N, self.c_maxlen, CL])          # shape=(N, c_maxlen, 16)
-                self.qh = tf.slice(self.qh, [0, 0, 0], [N, self.q_maxlen, CL])          # shape=(N, q_maxlen, 16)
-                self.xh = tf.slice(self.xh, [0, 0, 0], [N, self.x_maxlen, CL])          # shape=(N, x_maxlen, 16)
-                self.y1 = tf.slice(self.y1, [0, 0], [N, self.c_maxlen])                 # shape=(N, c_maxlen)
-                self.y2 = tf.slice(self.y2, [0, 0], [N, self.c_maxlen])                 # shape=(N, c_maxlen)
-                self.yx = tf.slice(self.yx, [0, 0], [N, self.x_maxlen])                 # shape=(N, x_maxlen)
+                self.c = tf.slice(self.c, [0, 0], [N, self.c_maxlen])                     # shape=(N, PL)
+                self.q = tf.slice(self.q, [0, 0], [N, self.q_maxlen])                     # shape=(N, QL)
+                self.x = tf.slice(self.x, [0, 0], [N, self.x_maxlen])                     # shape=(N, XL)
+                self.c_mask = tf.slice(self.c_mask, [0, 0], [N, self.c_maxlen])           # shape=(N, PL)
+                self.q_mask = tf.slice(self.q_mask, [0, 0], [N, self.q_maxlen])           # shape=(N, QL)
+                self.x_mask = tf.slice(self.x_mask, [0, 0], [N, self.x_maxlen])           # shape=(N, XL)
+                self.ch = tf.slice(self.ch, [0, 0, 0], [N, self.c_maxlen, CL])            # shape=(N, PL, 16)
+                self.qh = tf.slice(self.qh, [0, 0, 0], [N, self.q_maxlen, CL])            # shape=(N, QL, 16)
+                self.xh = tf.slice(self.xh, [0, 0, 0], [N, self.x_maxlen, CL])            # shape=(N, XL, 16)
+                self.y1 = tf.slice(self.y1, [0, 0], [N, self.c_maxlen])                   # shape=(N, PL)
+                self.y2 = tf.slice(self.y2, [0, 0], [N, self.c_maxlen])                   # shape=(N, PL)
+                self.yx = tf.slice(self.yx, [0, 0], [N, self.x_maxlen])                   # shape=(N, XL)
+
+                if self.config.cand_condense_vector:
+                    self.xp = tf.slice(self.xp, [0, 0, 0], [N, self.x_maxlen, self.c_maxlen]) # shape=(N, XL, PL)
+
+                if self.config.max_margin:
+                    self.yx_inv = tf.slice(self.yx_inv, [0, 0], [N, self.x_maxlen])       # shape=(N, x_maxlen)
             else:
                 self.c_maxlen, self.q_maxlen, self.x_maxlen = config.para_limit, config.ques_limit, config.cand_limit
+
+            # DEBUG
+            self.debug_ops.extend([self.xp, self.yx, self.y1])
 
             # shape=(N * c_maxlen)
             self.ch_len = tf.reshape(tf.reduce_sum(tf.cast(tf.cast(self.ch, tf.bool), tf.int32), axis=2), [-1])
@@ -147,10 +161,9 @@ class Model(object):
                 self.qh : (N, q_maxlen, 16)
                 self.xh : (N, x_maxlen, 16)
             '''
-            ch_emb = tf.reshape(tf.nn.embedding_lookup(self.char_mat, self.ch), [N * PL, CL, dc]) # (N*c_maxlen, 16, 64)
-            qh_emb = tf.reshape(tf.nn.embedding_lookup(self.char_mat, self.qh), [N * QL, CL, dc]) # (N*q_maxlen, 16, 64)
-            # (N*x_maxlen, 16, 64)
-            xh_emb = tf.reshape(tf.nn.embedding_lookup(self.char_mat, self.xh), [N * XL, CL, dc])
+            ch_emb = tf.reshape(tf.nn.embedding_lookup(self.char_mat, self.ch), [N * PL, CL, dc]) #(N*PL,16,64)
+            qh_emb = tf.reshape(tf.nn.embedding_lookup(self.char_mat, self.qh), [N * QL, CL, dc]) #(N*QL,16,64)
+            xh_emb = tf.reshape(tf.nn.embedding_lookup(self.char_mat, self.xh), [N * XL, CL, dc]) #(N*XL,16,64)
 
             ch_emb = tf.nn.dropout(ch_emb, 1.0 - 0.5 * self.dropout)
             qh_emb = tf.nn.dropout(qh_emb, 1.0 - 0.5 * self.dropout)
@@ -164,6 +177,7 @@ class Model(object):
             xh_emb = conv(xh_emb, d, bias = True, activation = tf.nn.relu, kernel_size = 5,
                           name="char_conv", reuse=True)  # (N*x_maxlen, 16-5+1, 96)
 
+            # Max Pooling
             ch_emb = tf.reduce_max(ch_emb, axis = 1) # (N*c_maxlen, 96)
             qh_emb = tf.reduce_max(qh_emb, axis = 1) # (N*q_maxlen, 96)
             xh_emb = tf.reduce_max(xh_emb, axis = 1) # (N*x_maxlen, 96)
@@ -177,17 +191,17 @@ class Model(object):
                 self.q : (N, q_maxlen)
                 self.x : (N, x_maxlen)
             '''
-            c_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.c), 1.0 - self.dropout) #(N, c_maxlen, 300)
-            q_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.q), 1.0 - self.dropout) #(N, q_maxlen, 300)
-            x_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.x), 1.0 - self.dropout) #(N, x_maxlen, 300)
+            c_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.c), 1.0 - self.dropout)#(N,c_maxlen,300)
+            q_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.q), 1.0 - self.dropout)#(N,q_maxlen,300)
+            x_emb = tf.nn.dropout(tf.nn.embedding_lookup(self.word_mat, self.x), 1.0 - self.dropout)#(N,x_maxlen,300)
 
             c_emb = tf.concat([c_emb, ch_emb], axis=2) # (N, c_maxlen, 396)
             q_emb = tf.concat([q_emb, qh_emb], axis=2) # (N, q_maxlen, 396)
             x_emb = tf.concat([x_emb, xh_emb], axis=2) # (N, x_maxlen, 396)
 
-            c_emb = highway(c_emb, size = d, scope = "highway", dropout = self.dropout, reuse = None) #(N, c_maxlen, 96)
-            q_emb = highway(q_emb, size = d, scope = "highway", dropout = self.dropout, reuse = True) #(N, q_maxlen, 96)
-            x_emb = highway(x_emb, size = d, scope = "highway", dropout = self.dropout, reuse = True) #(N, x_maxlen, 96)
+            c_emb = highway(c_emb, size = d, scope = "highway", dropout = self.dropout, reuse = None)#(N,c_maxlen,96)
+            q_emb = highway(q_emb, size = d, scope = "highway", dropout = self.dropout, reuse = True)#(N,q_maxlen,96)
+            x_emb = highway(x_emb, size = d, scope = "highway", dropout = self.dropout, reuse = True)#(N,x_maxlen,96)
 
         with tf.variable_scope("Embedding_Encoder_Layer"):
             '''
@@ -269,7 +283,7 @@ class Model(object):
             attention_outputs = [c, self.c2q, c * self.c2q, c * self.q2c]
             # if config.q2c:
             #     attention_outputs.append(c * self.q2c)
-            
+
         # with tf.variable_scope("Model_Encoder_Layer"):
         #     inputs = tf.concat(attention_outputs, axis = -1)
         #
@@ -300,13 +314,22 @@ class Model(object):
 
         with tf.variable_scope("Output_Layer"):
             '''
-                x_emb: (N, x_maxlen, 96)
-                inputs: (N, c_maxlen, 4*96)
-                mask_x: (N, x_maxlen, 1)
-                S_xc/S_xc_: (N, x_maxlen, c_maxlen)
-                x2c: (N, x_maxlen, d)
-                xplusc: (N, x_maxlen, d*2)
-                self.cand_logits: (N, x_maxlen, 1)
+                broadcasting:dimensions with size 1 are stretched or "copied" to match the other
+            '''
+            '''
+                x_emb:              (N, x_maxlen, d)
+                inputs:             (N, c_maxlen, 4*d)
+                mask_x:             (N, x_maxlen, 1)
+                c_proj:             (N, c_maxlen, d)
+                S_xc/S_xc_:         (N, x_maxlen, c_maxlen)
+                x2c:                (N, x_maxlen, d)
+                xp_exp:             (N, x_maxlen, c_maxlen, 1)
+                c_proj_exp:         (N, 1, c_maxlen, d)
+                cand_context:       (N, x_maxlen, c_maxlen, d)
+                cand_context_pool:  (N, x_maxlen, d)
+                cand_condense:      (N, x_maxlen, d*2)
+                self.cand_condense: (N, x_maxlen, d)
+                self.cand_logits:   (N, x_maxlen, 1)
             '''
             inputs = tf.concat(attention_outputs, axis = -1)
 
@@ -318,16 +341,56 @@ class Model(object):
                                                   input_keep_prob=1.0 - self.dropout)
             S_xc_ = tf.nn.softmax(mask_logits(S_xc, mask = mask_x))
 
-            x2c = tf.matmul(S_xc_, c_proj)
-            # xplusc = tf.concat([x_emb, x2c], axis=-1)
-            cand_logits = tf.squeeze(conv(x2c, 1, bias=False, name="candidate_logits"), -1)
-            self.cand_logits = mask_logits(cand_logits, mask=self.x_mask)
-            loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.cand_logits, labels=self.yx)
-            self.loss = tf.reduce_mean(loss)
+            self.x2c = tf.matmul(S_xc_, c_proj)
 
-            # DEBUG
-            self.debug_ops.extend([loss, x_emb, c_proj, S_xc, S_xc_, x2c, cand_logits,
-                                   self.x_mask, self.cand_logits, self.yx])
+            self.cand_condense = self.x2c
+
+            if self.config.cand_condense_vector:
+                xp_exp = tf.expand_dims(self.xp, axis=-1)
+                c_proj_exp = tf.expand_dims(c_proj, axis=1)
+                cand_context = tf.multiply(c_proj_exp, xp_exp)
+
+                if self.config.cand_condense_conv:
+                    cand_context = tf.reshape(cand_context, [N*XL, PL, d])
+                    cand_context = conv(cand_context, d, bias=True, activation=tf.nn.relu,
+                                        kernel_size=3, name="candidate_from_context")
+                    cand_context = tf.reshape(cand_context, [N, XL, -1, d])
+
+                cand_context_pool = tf.reduce_max(cand_context, axis=-2)
+
+                cand_condense = tf.concat([self.x2c, cand_context_pool], axis = -1)
+                self.cand_condense = conv(cand_condense, d, name="candidate_projection")
+
+                if self.config.cand_fuse_vector:
+                    raise NotImplementedError
+
+                # DEBUG
+                self.debug_ops.extend([xp_exp, c_proj_exp, cand_context, cand_context_pool,
+                                       cand_condense, self.cand_condense])
+
+            if not config.max_margin:
+                cand_logits = tf.squeeze(conv(self.cand_condense, 1, bias=False, name="candidate_logits_1"), -1)
+                self.cand_logits = mask_logits(cand_logits, mask=self.x_mask)
+                loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.cand_logits, labels=self.yx)
+                # DEBUG
+                self.debug_ops.extend([loss, x_emb, c_proj, S_xc, S_xc_, self.x2c,
+                                       self.x_mask, self.cand_logits, self.yx])
+            else:
+                cand_logits = conv(self.cand_condense, 1, bias=False, name="candidate_logits_1")
+                cand_logits = tf.tanh(cand_logits)
+                cand_logits = tf.squeeze(conv(cand_logits, 1, bias=False, name="candidate_logits_2"), -1)
+                self.cand_logits = tf.sigmoid(cand_logits)
+                pos = tf.multiply(self.cand_logits, self.yx)
+                pos = tf.reduce_max(pos, axis=-1)
+                negs = tf.multiply(self.cand_logits, self.yx_inv)
+                neg = tf.reduce_max(negs, axis=-1)
+                loss = tf.maximum(tf.add(tf.subtract(neg, pos), config.margin), 0.0)
+                # DEBUG
+                self.debug_ops.extend([loss, x_emb, c_proj, S_xc, S_xc_, self.x2c,
+                                       self.x_mask, self.cand_logits, self.yx,
+                                       pos, negs, neg, self.yx, self.yx_inv])
+
+            self.loss = tf.reduce_mean(loss)
 
         # with tf.variable_scope("Output_Layer"):
         #     '''

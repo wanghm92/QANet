@@ -22,7 +22,8 @@ test_file = os.path.join(mhrc, "data", "with_cand", "wikihop.dev.cand.withcand.s
 glove_word_file = os.path.join(home, "data", "glove", "glove.840B.300d.txt")
 
 out_dir = "output"
-model_name = "mhrc_qplusa_with_cand_new"
+model_name = "temp"
+# model_name = "mhrc_qplusa_with_cand_new"
 # model_name = "mhrc_qplusa_clipped"
 model_out_path = os.path.join(out_dir, model_name)
 if not os.path.exists(out_dir):
@@ -30,8 +31,8 @@ if not os.path.exists(out_dir):
 if not os.path.exists(os.path.join(os.getcwd(),model_out_path)):
     os.mkdir(os.path.join(os.getcwd(),model_out_path))
     
-prepro_out = "mhrc_qplusa_with_cand_prepro_new"
-# prepro_out = "temp"
+# prepro_out = "mhrc_qplusa_with_cand_prepro_new"
+prepro_out = "temp"
 log_dir = os.path.join(model_out_path, "event")
 save_dir = os.path.join(model_out_path, "model")
 answer_dir = os.path.join(model_out_path, "answer")
@@ -102,11 +103,17 @@ flags.DEFINE_integer("capacity", 15000, "Number of elements from which the new d
 flags.DEFINE_integer("num_threads", 4, "Number of threads in input pipeline")
 # TODO: change it back if necessary
 flags.DEFINE_boolean("is_bucket", True, "build bucket batch iterator or not")
+flags.DEFINE_boolean("max_margin", False, "whether to use max margin (default is tf.losses.hinge_loss)")
+flags.DEFINE_boolean("cand_fuse_vector", False, "append candidate fused vector")
+flags.DEFINE_boolean("cand_condense_vector", True, "append candidate condense vector")
+flags.DEFINE_boolean("cand_condense_conv", True, "convolution on cand_context")
+flags.DEFINE_float("margin", 0.2, "margin for margin loss")
+
 flags.DEFINE_list("bucket_range", [40, 401, 40], "the range of bucket")
 
 flags.DEFINE_integer("batch_size", 32, "Batch size")
-flags.DEFINE_integer("num_steps", 250000, "Number of steps")
-flags.DEFINE_integer("checkpoint", 1000, "checkpoint to save and evaluate the model")
+flags.DEFINE_integer("num_steps", 250000, "Number of steps") # 250000
+flags.DEFINE_integer("checkpoint", 1000, "checkpoint to save and evaluate the model") # 1000
 flags.DEFINE_integer("period", 100, "period to save batch loss")
 flags.DEFINE_integer("val_num_batches", 100, "Number of train batches to evaluate the model")
 flags.DEFINE_float("dropout", 0.1, "Dropout prob across the layers")

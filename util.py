@@ -29,6 +29,7 @@ def get_record_parser(config, is_test=False):
                                                "ques_char_idxs":    tf.FixedLenFeature([], tf.string),
                                                "cand_char_idxs":    tf.FixedLenFeature([], tf.string),
                                                "cand_label":        tf.FixedLenFeature([], tf.string),
+                                               "cand_positions":    tf.FixedLenFeature([], tf.string),
                                                "y1":                tf.FixedLenFeature([], tf.string),
                                                "y2":                tf.FixedLenFeature([], tf.string),
                                                "id":                tf.FixedLenFeature([], tf.int64)
@@ -40,13 +41,14 @@ def get_record_parser(config, is_test=False):
         ques_char_idxs =    tf.reshape(tf.decode_raw(features["ques_char_idxs"],    tf.int32), [ques_limit, char_limit])
         cand_char_idxs =    tf.reshape(tf.decode_raw(features["cand_char_idxs"],    tf.int32), [cand_limit, char_limit])
         cand_label =        tf.reshape(tf.decode_raw(features["cand_label"],        tf.float32), [cand_limit])
+        cand_positions =    tf.reshape(tf.decode_raw(features["cand_positions"], tf.float32), [cand_limit, para_limit])
         y1 =                tf.reshape(tf.decode_raw(features["y1"],                tf.float32), [para_limit])
         y2 =                tf.reshape(tf.decode_raw(features["y2"],                tf.float32), [para_limit])
         qa_id =             features["id"]
 
         return context_idxs, ques_idxs, cand_idxs, \
                context_char_idxs, ques_char_idxs, cand_char_idxs, \
-               cand_label, y1, y2, qa_id
+               cand_label, cand_positions, y1, y2, qa_id
     return parse
 
 
@@ -75,7 +77,7 @@ def get_batch_dataset(record_file, parser, config):
 
         def key_func(context_idxs, ques_idxs, cand_idxs,
                      context_char_idxs, ques_char_idxs, cand_char_idxs,
-                     cand_label, y1, y2, qa_id):
+                     cand_label, cand_positions, y1, y2, qa_id):
             c_len = tf.reduce_sum(tf.cast(tf.cast(context_idxs, tf.bool), tf.int32))
             t = tf.clip_by_value(buckets, 0, c_len)
             return tf.argmax(t)

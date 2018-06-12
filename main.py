@@ -89,9 +89,8 @@ def train(config):
                                           feed_dict={handle: train_handle, model.dropout: config.dropout})
                 # DEBUG
                 # temp = sess.run(model.debug_ops, feed_dict={handle: train_handle, model.dropout: config.dropout})
-                # for t in temp[:4]:
-                #     print(t)
-                # for t in temp[3:]:
+                # for t in temp:
+                #     # print(t)
                 #     print(t.shape)
                 # sys.exit(0)
 

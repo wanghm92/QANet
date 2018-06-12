@@ -356,7 +356,10 @@ class Model(object):
                                         kernel_size=3, name="candidate_from_context")
                     cand_context = tf.reshape(cand_context, [N, XL, -1, d])
 
-                cand_context_pool = tf.reduce_max(cand_context, axis=-2)
+                if self.config.cand_condense_pool:
+                    cand_context_pool = tf.reduce_max(cand_context, axis=-2)
+                else:
+                    cand_context_pool = tf.reduce_mean(cand_context, axis=-2)
 
                 cand_condense = tf.concat([self.x2c, cand_context_pool], axis = -1)
                 self.cand_condense = conv(cand_condense, d, name="candidate_projection")

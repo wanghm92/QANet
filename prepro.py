@@ -231,7 +231,7 @@ def build_features(config, examples, data_type, out_file, word2idx_dict, char2id
         for i, token in enumerate(candidates):
             token = token+' '
             char_start = context.find(token)
-            if start > -1:
+            if char_start > -1:
                 l = len(token.split())
                 pretext = context[:char_start].strip()
                 token_start = len(pretext.split())
